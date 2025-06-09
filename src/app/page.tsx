@@ -233,7 +233,7 @@ export default function Home() {
         enableMouseEvents
         resistance
         hysteresis={0.3}
-        style={{ touchAction: "pan-y" }}
+        // style={{ touchAction: "pan-y" }}
       >
         <TabPanel value={value} index={0}>
           <Calendar isDrawerOpen={isDrawerOpen} />

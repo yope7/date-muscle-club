@@ -25,6 +25,7 @@ export type WorkoutRecord = {
   tags: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
+  isNewRecord?: boolean;
 };
 
 export type User = {

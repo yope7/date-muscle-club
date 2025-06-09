@@ -32,6 +32,12 @@ import {
   Comment as CommentIcon,
   Share as ShareIcon,
   Delete as DeleteIcon,
+  LocalFlorist as LocalFloristIcon,
+  SportsGymnastics as SportsGymnasticsIcon,
+  FitnessCenter as FitnessCenterIcon,
+  EmojiEvents as EmojiEventsIcon,
+  SelfImprovement as SelfImprovementIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from "@mui/icons-material";
 import { useUserStore } from "@/store/userStore";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -46,6 +52,9 @@ import {
   doc,
   getDocs,
   orderBy,
+  updateDoc,
+  writeBatch,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -57,9 +66,21 @@ interface FeedProps {
 // システムユーザーの定義
 const SYSTEM_USERS = [
   {
+    id: "system_god",
+    displayName: "GOD",
+    icon: <AutoAwesomeIcon sx={{ fontSize: 20, color: "warning.main" }} />,
+    messages: [
+      "素晴らしい記録だ！",
+      "その努力、認める！",
+      "もっと上を目指せ！",
+      "限界を超えていけ！",
+      "君ならできる！",
+    ],
+  },
+  {
     id: "system_macho",
     displayName: "マッチョマン",
-    photoURL: "https://api.dicebear.com/7.x/bottts/svg?seed=muscle",
+    icon: <FitnessCenterIcon sx={{ fontSize: 20, color: "primary.main" }} />,
     messages: [
       "ナイスワーク！その筋肉の成長が見えるぜ！💪",
       "お前の努力が実を結んでるな！",
@@ -71,19 +92,21 @@ const SYSTEM_USERS = [
   {
     id: "system_ojosama",
     displayName: "お嬢様",
-    photoURL: "https://api.dicebear.com/7.x/bottts/svg?seed=ojosama",
+    icon: <LocalFloristIcon sx={{ fontSize: 20, color: "secondary.main" }} />,
     messages: [
       "まぁ、素晴らしいわ！",
       "その努力、認めてあげるわ！",
       "私も見習わないといけないわね！",
       "素敵な記録ですわ！",
       "あなたの成長、楽しみですわ！",
+      "お疲れ様ですわ！",
+      "かっこいいですわ！",
     ],
   },
   {
     id: "system_coach",
     displayName: "熱血コーチ",
-    photoURL: "https://api.dicebear.com/7.x/bottts/svg?seed=coach",
+    icon: <EmojiEventsIcon sx={{ fontSize: 20, color: "warning.main" }} />,
     messages: [
       "いいぞ！その調子だ！",
       "限界を超えていけ！",
@@ -94,26 +117,19 @@ const SYSTEM_USERS = [
   },
   {
     id: "system_otaku",
-    displayName: "筋トレオタク",
-    photoURL: "https://api.dicebear.com/7.x/bottts/svg?seed=otaku",
-    messages: [
-      "その重量、マジでヤバい！",
-      "フォームが完璧すぎる！",
-      "筋肉の神が降臨したか！？",
-      "その努力、尊敬する！",
-      "もっと記録を伸ばしていこう！",
-    ],
+    displayName: "GOD",
+    icon: <SportsGymnasticsIcon sx={{ fontSize: 40, color: "success.main" }} />,
+    messages: ["やるのぉ", "力が欲しいか", "筋肉をやろう"],
   },
   {
     id: "system_yogini",
     displayName: "ヨガインストラクター",
-    photoURL: "https://api.dicebear.com/7.x/bottts/svg?seed=yoga",
+    icon: <SelfImprovementIcon sx={{ fontSize: 40, color: "info.main" }} />,
     messages: [
       "素晴らしい呼吸と共に、その努力を讃えましょう！",
       "心と体の調和が感じられます！",
       "その成長、心から祝福します！",
-      "あなたの努力は必ず実を結びます！",
-      "素敵な記録ですね！",
+      "では私も...",
     ],
   },
 ];
@@ -130,6 +146,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     useWorkoutStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
+  const [isUpdatingRecords, setIsUpdatingRecords] = useState(false);
+  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(true);
   const [likes, setLikes] = useState<{ [key: string]: boolean }>({});
   const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
   const [likeUsers, setLikeUsers] = useState<{
@@ -157,6 +175,16 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const startY = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const PULL_THRESHOLD = 100;
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート
+  const allWorkouts = React.useMemo(() => {
+    if (isLoadingWorkouts) return [];
+
+    return [...workouts, ...friendWorkouts].sort(
+      (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+    );
+  }, [workouts, friendWorkouts, isLoadingWorkouts]);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (containerRef.current?.scrollTop === 0) {
@@ -312,16 +340,83 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     });
   }, [workouts, friendWorkouts]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchWorkouts = async () => {
+      setIsLoadingWorkouts(true);
+      try {
+        // 1秒待ってからデータを取得
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
+        const workoutsQuery = query(
+          collection(db, "workouts"),
+          where("userId", "==", user.uid)
+        );
+        const snapshot = await getDocs(workoutsQuery);
+        const workoutData = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            isNewRecord: Boolean(data.isNewRecord),
+            date: data.date,
+            sets: data.sets || [],
+          };
+        }) as WorkoutRecord[];
+      } catch (error) {
+        console.error("Error fetching workouts:", error);
+      } finally {
+        setIsLoadingWorkouts(false);
+      }
+    };
+
+    fetchWorkouts();
+
+    // クリーンアップ関数
+    return () => {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current);
+      }
+    };
+  }, [user]);
+
   // システムコメントを投稿する関数
   const postSystemComment = async (
     workoutId: string,
-    systemUser: (typeof SYSTEM_USERS)[0]
+    systemUser: (typeof SYSTEM_USERS)[0],
+    isNewRecord: boolean = false
   ) => {
     try {
-      console.log(
-        `システムコメント投稿開始: workoutId=${workoutId}, user=${systemUser.displayName}`
-      );
-      const message = getRandomElement(systemUser.messages);
+      // 最高記録の場合のメッセージ
+      let message;
+      if (isNewRecord) {
+        switch (systemUser.id) {
+          case "system_god":
+            message = "最高新記録おめでとう！神の祝福がある！";
+            break;
+          case "system_ojosama":
+            message = "まぁ、最高新記録ですわ！素晴らしいですわ！";
+            break;
+          case "system_macho":
+            message = "最高新記録おめでとう！その筋肉、神がかってるぜ！";
+            break;
+          case "system_coach":
+            message = "最高新記録おめでとう！その努力が実を結んだな！";
+            break;
+          case "system_otaku":
+            message = "最高新記録おめでとう！マジでヤバすぎる！";
+            break;
+          case "system_yogini":
+            message =
+              "最高新記録おめでとう！心と体の調和が生み出した奇跡です！";
+            break;
+          default:
+            message = "最高新記録おめでとう！";
+        }
+      } else {
+        message = getRandomElement(systemUser.messages);
+      }
 
       await addDoc(collection(db, "comments"), {
         workoutId,
@@ -330,12 +425,10 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         createdAt: new Date(),
         user: {
           displayName: systemUser.displayName,
-          photoURL: systemUser.photoURL,
+          isSystemUser: true,
+          systemUserId: systemUser.id,
         },
       });
-      console.log(
-        `システムコメント投稿完了: workoutId=${workoutId}, user=${systemUser.displayName}`
-      );
     } catch (error) {
       console.error("システムコメントの投稿に失敗しました:", error);
     }
@@ -343,21 +436,78 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
   // 新しいワークアウトが追加されたときにシステムコメントを投稿
   useEffect(() => {
-    const postSystemCommentForNewWorkout = async (workoutId: string) => {
-      // 1秒待機
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    const postSystemCommentForNewWorkout = async (
+      workoutId: string,
+      workout: WorkoutRecord
+    ) => {
+      try {
+        // 既存のコメントをチェック
+        const commentsQuery = query(
+          collection(db, "comments"),
+          where("workoutId", "==", workoutId)
+        );
+        const snapshot = await getDocs(commentsQuery);
 
-      // 既存のコメントをチェック
-      const commentsQuery = query(
-        collection(db, "comments"),
-        where("workoutId", "==", workoutId)
-      );
-      const snapshot = await getDocs(commentsQuery);
+        // コメントが0件の場合のみシステムコメントを投稿
+        if (snapshot.empty) {
+          // 最高重量を計算
+          const maxWeight =
+            workout.sets?.reduce(
+              (max, set) => Math.max(max, set.weight || 0),
+              0
+            ) || 0;
 
-      // コメントが0件の場合のみシステムコメントを投稿
-      if (snapshot.empty) {
-        const selectedSystemUser = getRandomElement(SYSTEM_USERS);
-        await postSystemComment(workoutId, selectedSystemUser);
+          // 過去の最高記録を取得
+          const previousWorkoutsQuery = query(
+            collection(db, "workouts"),
+            where("userId", "==", workout.userId),
+            where("date", "<", workout.date)
+          );
+          const previousWorkouts = await getDocs(previousWorkoutsQuery);
+
+          // 過去の最高重量を計算
+          let previousMaxWeight = 0;
+          previousWorkouts.docs.forEach((doc) => {
+            const data = doc.data() as WorkoutRecord;
+            const workoutMaxWeight =
+              data.sets?.reduce(
+                (workoutMax, set) => Math.max(workoutMax, set.weight || 0),
+                0
+              ) || 0;
+            previousMaxWeight = Math.max(previousMaxWeight, workoutMaxWeight);
+          });
+
+          // 最高記録を更新したかチェック
+          const isNewRecord = maxWeight > previousMaxWeight;
+
+          // 最高記録の場合、ワークアウトデータを更新
+          if (isNewRecord) {
+            try {
+              // ドキュメントの存在確認
+              const workoutRef = doc(db, "workouts", workoutId);
+              const workoutDoc = await getDoc(workoutRef);
+
+              if (workoutDoc.exists()) {
+                await updateDoc(workoutRef, {
+                  isNewRecord: true,
+                });
+
+                // フィードを更新
+                if (onRefresh) {
+                  await onRefresh();
+                }
+              }
+            } catch (error) {
+              console.error("Failed to update workout:", error);
+            }
+          }
+
+          // システムコメントを1件だけ投稿
+          const selectedSystemUser = getRandomElement(SYSTEM_USERS);
+          await postSystemComment(workoutId, selectedSystemUser, isNewRecord);
+        }
+      } catch (error) {
+        console.error("Error in postSystemCommentForNewWorkout:", error);
       }
     };
 
@@ -367,9 +517,9 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     )[0];
 
     if (latestWorkout) {
-      postSystemCommentForNewWorkout(latestWorkout.id);
+      postSystemCommentForNewWorkout(latestWorkout.id, latestWorkout);
     }
-  }, [workouts.length + friendWorkouts.length]); // 配列の長さの合計が変更されたときのみ実行
+  }, [workouts.length]); // 依存配列をworkouts.lengthのみに変更
 
   const handleLike = async (workoutId: string) => {
     if (!user) return;
@@ -483,6 +633,33 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     }
   };
 
+  // システムユーザーのコメントのアイコンを更新する関数
+  const updateSystemUserIcons = async () => {
+    try {
+      // 各システムユーザーのコメントを取得して更新
+      for (const systemUser of SYSTEM_USERS) {
+        const commentsQuery = query(
+          collection(db, "comments"),
+          where("userId", "==", systemUser.id)
+        );
+        const snapshot = await getDocs(commentsQuery);
+
+        // 各コメントのユーザー情報を更新
+        const updatePromises = snapshot.docs.map((doc) =>
+          updateDoc(doc.ref, {
+            "user.isSystemUser": true,
+            "user.systemUserId": systemUser.id,
+          })
+        );
+
+        await Promise.all(updatePromises);
+      }
+      console.log("システムユーザーのアイコンを更新しました");
+    } catch (error) {
+      console.error("システムユーザーのアイコン更新に失敗しました:", error);
+    }
+  };
+
   // コメントの表示を時系列順にソートする関数
   const getSortedComments = (workoutId: string) => {
     const workoutComments = comments[workoutId] || [];
@@ -491,7 +668,98 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     );
   };
 
-  if (isLoading) {
+  // 既存のフィードの最高記録を更新する関数
+  const updateExistingRecords = async () => {
+    setIsUpdatingRecords(true);
+    try {
+      // 全ユーザーのワークアウトを取得
+      const workoutsRef = collection(db, "workouts");
+      const workoutsSnapshot = await getDocs(workoutsRef);
+      const allWorkouts = workoutsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as WorkoutRecord[];
+
+      // ユーザーごとに最高記録を計算
+      const userMaxWeights = new Map<string, number>();
+      const userWorkouts = new Map<string, WorkoutRecord[]>();
+
+      // ユーザーごとにワークアウトをグループ化
+      allWorkouts.forEach((workout) => {
+        const userWorkoutsList = userWorkouts.get(workout.userId) || [];
+        userWorkoutsList.push(workout);
+        userWorkouts.set(workout.userId, userWorkoutsList);
+      });
+
+      // 各ユーザーの最高記録を計算
+      for (const [userId, workouts] of userWorkouts) {
+        let maxWeight = 0;
+        workouts.forEach((workout) => {
+          const workoutMaxWeight =
+            workout.sets?.reduce(
+              (max, set) => Math.max(max, set.weight || 0),
+              0
+            ) || 0;
+          maxWeight = Math.max(maxWeight, workoutMaxWeight);
+        });
+        userMaxWeights.set(userId, maxWeight);
+      }
+
+      // 最高記録を更新
+      const batch = writeBatch(db);
+      for (const [userId, workouts] of userWorkouts) {
+        const maxWeight = userMaxWeights.get(userId) || 0;
+        workouts.forEach((workout) => {
+          const workoutMaxWeight =
+            workout.sets?.reduce(
+              (max, set) => Math.max(max, set.weight || 0),
+              0
+            ) || 0;
+          if (workoutMaxWeight === maxWeight) {
+            batch.update(doc(db, "workouts", workout.id), {
+              isNewRecord: true,
+            });
+          } else {
+            batch.update(doc(db, "workouts", workout.id), {
+              isNewRecord: false,
+            });
+          }
+        });
+      }
+
+      await batch.commit();
+      console.log("最高記録の更新が完了しました");
+    } catch (error) {
+      console.error("最高記録の更新に失敗しました:", error);
+    } finally {
+      setIsUpdatingRecords(false);
+    }
+  };
+
+  // バッジの表示部分を修正
+  const renderWorkoutBadge = (workout: WorkoutRecord) => {
+    if (!workout.isNewRecord) return null;
+
+    return (
+      <Box sx={{ mt: 1 }}>
+        <Chip
+          icon={<EmojiEventsIcon />}
+          label="最高記録"
+          color="warning"
+          size="small"
+          sx={{
+            backgroundColor: "warning.main",
+            color: "warning.contrastText",
+            "& .MuiChip-icon": {
+              color: "warning.contrastText",
+            },
+          }}
+        />
+      </Box>
+    );
+  };
+
+  if (isLoadingWorkouts) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
         <CircularProgress />
@@ -506,11 +774,6 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
       </Box>
     );
   }
-
-  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート
-  const allWorkouts = [...workouts, ...friendWorkouts].sort(
-    (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
-  );
 
   return (
     <>
@@ -600,6 +863,22 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                           })}
                         </Typography>
                       </Box>
+                      {workout.isNewRecord && (
+                        <Chip
+                          icon={<EmojiEventsIcon />}
+                          label="最高記録"
+                          color="warning"
+                          size="small"
+                          sx={{
+                            ml: 1,
+                            backgroundColor: "warning.main",
+                            color: "warning.contrastText",
+                            "& .MuiChip-icon": {
+                              color: "warning.contrastText",
+                            },
+                          }}
+                        />
+                      )}
                     </Box>
 
                     <Box sx={{ width: "100%", mb: 2 }}>
@@ -611,14 +890,20 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                         )}
                         回
                       </Typography>
-                      {workout.sets?.map((set, setIndex) => (
-                        <Chip
-                          key={setIndex}
-                          label={`${set.weight}kg × ${set.reps}回`}
-                          size="small"
-                          sx={{ mr: 1, mb: 1 }}
-                        />
-                      ))}
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        sx={{ mb: 1 }}
+                      >
+                        {workout.sets?.map((set, setIndex) => (
+                          <Chip
+                            key={setIndex}
+                            label={`${set.weight}kg × ${set.reps}回`}
+                            size="small"
+                          />
+                        ))}
+                      </Stack>
                       {workout.memo && (
                         <Typography
                           variant="body2"
@@ -700,57 +985,77 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                     {comments[workout.id]?.length > 0 && (
                       <Box sx={{ width: "100%", mt: 2, pl: 2 }}>
                         <Stack spacing={1}>
-                          {getSortedComments(workout.id).map((comment) => (
-                            <Box
-                              key={comment.id}
-                              sx={{
-                                display: "flex",
-                                alignItems: "flex-start",
-                                gap: 1,
-                              }}
-                            >
-                              <Avatar
-                                src={comment.user.photoURL}
-                                sx={{ width: 24, height: 24, mt: 0.5 }}
-                              />
-                              <Box sx={{ flex: 1 }}>
-                                <Box
+                          {getSortedComments(workout.id).map((comment) => {
+                            const systemUser = SYSTEM_USERS.find(
+                              (user) => user.id === comment.userId
+                            );
+                            return (
+                              <Box
+                                key={comment.id}
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: 1,
+                                }}
+                              >
+                                <Avatar
                                   sx={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
+                                    width: 24,
+                                    height: 24,
+                                    mt: 0.5,
+                                    bgcolor: systemUser
+                                      ? "transparent"
+                                      : undefined,
                                   }}
                                 >
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {comment.user.displayName}
-                                  </Typography>
-                                  {(comment.userId === user?.uid ||
-                                    SYSTEM_USERS.some(
-                                      (sysUser) => sysUser.id === comment.userId
-                                    )) && (
-                                    <IconButton
-                                      size="small"
-                                      onClick={() =>
-                                        handleDeleteComment(
-                                          comment.id,
-                                          comment.userId
-                                        )
-                                      }
-                                      sx={{ p: 0.5 }}
-                                    >
-                                      <DeleteIcon fontSize="small" />
-                                    </IconButton>
+                                  {systemUser ? (
+                                    systemUser.icon
+                                  ) : (
+                                    <Typography variant="caption">
+                                      {comment.user.displayName.charAt(0)}
+                                    </Typography>
                                   )}
+                                </Avatar>
+                                <Box sx={{ flex: 1 }}>
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      justifyContent: "space-between",
+                                      alignItems: "center",
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                    >
+                                      {comment.user.displayName}
+                                    </Typography>
+                                    {(comment.userId === user?.uid ||
+                                      SYSTEM_USERS.some(
+                                        (sysUser) =>
+                                          sysUser.id === comment.userId
+                                      )) && (
+                                      <IconButton
+                                        size="small"
+                                        onClick={() =>
+                                          handleDeleteComment(
+                                            comment.id,
+                                            comment.userId
+                                          )
+                                        }
+                                        sx={{ p: 0.5 }}
+                                      >
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    )}
+                                  </Box>
+                                  <Typography variant="body2">
+                                    {comment.content}
+                                  </Typography>
                                 </Box>
-                                <Typography variant="body2">
-                                  {comment.content}
-                                </Typography>
                               </Box>
-                            </Box>
-                          ))}
+                            );
+                          })}
                         </Stack>
                       </Box>
                     )}
