@@ -14,8 +14,10 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  TextField,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
+import AddIcon from "@mui/icons-material/Add";
 import { WorkoutRecord } from "@/types/workout";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { Timestamp } from "firebase/firestore";
@@ -23,13 +25,21 @@ import { Timestamp } from "firebase/firestore";
 interface WorkoutSetsProps {
   workout: WorkoutRecord;
   onDelete?: (workout: WorkoutRecord) => void;
+  onAddSet?: () => void;
 }
 
-export const WorkoutSets = ({ workout, onDelete }: WorkoutSetsProps) => {
-  const { updateWorkout } = useWorkoutStore();
+export const WorkoutSets = ({
+  workout,
+  onDelete,
+  onAddSet,
+}: WorkoutSetsProps) => {
+  const { updateWorkout, addWorkout } = useWorkoutStore();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [setToDelete, setSetToDelete] = useState<number | null>(null);
   const [deleteWorkoutDialogOpen, setDeleteWorkoutDialogOpen] = useState(false);
+  const [newSetDialogOpen, setNewSetDialogOpen] = useState(false);
+  const [newSet, setNewSet] = useState({ weight: "", reps: "" });
+
   const totalWeight = workout.sets.reduce(
     (sum, set) => sum + set.weight * set.reps,
     0
@@ -70,6 +80,33 @@ export const WorkoutSets = ({ workout, onDelete }: WorkoutSetsProps) => {
     setDeleteWorkoutDialogOpen(false);
   };
 
+  const handleAddSet = async () => {
+    if (!newSet.weight || !newSet.reps) return;
+
+    const updatedSets = [
+      ...workout.sets,
+      {
+        weight: Number(newSet.weight),
+        reps: Number(newSet.reps),
+      },
+    ];
+
+    const updatedWorkout: WorkoutRecord = {
+      ...workout,
+      sets: updatedSets,
+      updatedAt: Timestamp.fromDate(new Date()),
+    };
+
+    if (workout.id) {
+      await updateWorkout(updatedWorkout);
+    } else {
+      await addWorkout(updatedWorkout);
+    }
+
+    setNewSet({ weight: "", reps: "" });
+    setNewSetDialogOpen(false);
+  };
+
   return (
     <Box sx={{ p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
       <Stack spacing={2}>
@@ -93,16 +130,26 @@ export const WorkoutSets = ({ workout, onDelete }: WorkoutSetsProps) => {
               </Typography>
             </Stack>
           </Box>
-          {onDelete && (
+          <Stack direction="row" spacing={1}>
             <IconButton
-              aria-label="削除"
-              onClick={handleDeleteWorkout}
+              aria-label="セットを追加"
+              onClick={onAddSet}
               size="small"
-              sx={{ color: "error.main" }}
+              color="primary"
             >
-              <DeleteIcon />
+              <AddIcon />
             </IconButton>
-          )}
+            {onDelete && (
+              <IconButton
+                aria-label="削除"
+                onClick={handleDeleteWorkout}
+                size="small"
+                sx={{ color: "error.main" }}
+              >
+                <DeleteIcon />
+              </IconButton>
+            )}
+          </Stack>
         </Box>
 
         <Stack spacing={1}>
@@ -164,21 +211,6 @@ export const WorkoutSets = ({ workout, onDelete }: WorkoutSetsProps) => {
               />
             ))}
           </Stack>
-        )}
-
-        {workout.memo && (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{
-              bgcolor: "grey.900",
-              p: 1.5,
-              borderRadius: 1,
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {workout.memo}
-          </Typography>
         )}
       </Stack>
 

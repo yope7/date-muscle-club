@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import React, { useState, useEffect, useRef } from "react";
+import { Box, Typography, useTheme, useMediaQuery } from "@mui/material";
 
 interface WeightPickerProps {
   value: number;
@@ -11,15 +11,15 @@ interface WeightPickerProps {
   step?: number;
 }
 
-export const WeightPicker = ({ 
-  value, 
-  onChange, 
-  min = 25, 
-  max = 150, 
-  step = 2.5 
+export const WeightPicker = ({
+  value,
+  onChange,
+  min = 25,
+  max = 150,
+  step = 2.5,
 }: WeightPickerProps) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const [startValue, setStartValue] = useState(0);
@@ -33,7 +33,7 @@ export const WeightPicker = ({
 
   // 現在の値のインデックスを取得（最も近い値を使用）
   const getCurrentIndex = (val: number) => {
-    return weights.findIndex(w => w >= val) || 0;
+    return weights.findIndex((w) => w >= val) || 0;
   };
 
   const currentIndex = getCurrentIndex(value);
@@ -55,8 +55,10 @@ export const WeightPicker = ({
 
     const deltaY = startY - e.touches[0].clientY;
     const deltaValue = Math.round(deltaY / 10);
-    const newValue = Math.max(0, startValue + deltaValue);
-    onChange(newValue);
+    const rawValue = Math.max(0, startValue + deltaValue);
+    // 2.5kg刻みの最も近い値にスナップ
+    const snappedValue = Math.round(rawValue / step) * step;
+    onChange(snappedValue);
   };
 
   const handleTouchEnd = () => {
@@ -70,40 +72,43 @@ export const WeightPicker = ({
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = Math.sign(e.deltaY) * -1;
-      onChange(Math.max(0, value + delta));
+      const rawValue = Math.max(0, value + delta);
+      // 2.5kg刻みの最も近い値にスナップ
+      const snappedValue = Math.round(rawValue / step) * step;
+      onChange(snappedValue);
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [value, onChange]);
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
+  }, [value, onChange, step]);
 
   return (
     <Box
       ref={containerRef}
       sx={{
         height: isMobile ? 120 : 150,
-        overflow: 'hidden',
-        position: 'relative',
-        cursor: 'ns-resize',
-        userSelect: 'none',
-        touchAction: 'none',
+        overflow: "hidden",
+        position: "relative",
+        cursor: "ns-resize",
+        userSelect: "none",
+        touchAction: "none",
         bgcolor: theme.palette.background.paper,
         borderRadius: 1,
         border: `1px solid ${theme.palette.divider}`,
-        '&::before, &::after': {
+        "&::before, &::after": {
           content: '""',
-          position: 'absolute',
+          position: "absolute",
           left: 0,
           right: 0,
-          height: '40%',
-          pointerEvents: 'none',
+          height: "40%",
+          pointerEvents: "none",
           zIndex: 1,
         },
-        '&::before': {
+        "&::before": {
           top: 0,
           background: `linear-gradient(to bottom, ${theme.palette.background.paper}, transparent)`,
         },
-        '&::after': {
+        "&::after": {
           bottom: 0,
           background: `linear-gradient(to top, ${theme.palette.background.paper}, transparent)`,
         },
@@ -114,12 +119,12 @@ export const WeightPicker = ({
     >
       <Box
         sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          py: 2,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          py: 1,
         }}
       >
         {visibleWeights.map((weight) => (
@@ -127,30 +132,18 @@ export const WeightPicker = ({
             key={weight}
             variant={isMobile ? "h6" : "h5"}
             sx={{
-              my: 1,
+              my: 0.5,
               opacity: weight === value ? 1 : 0.3,
               transform: `scale(${weight === value ? 1 : 0.8})`,
-              transition: 'all 0.2s ease',
-              fontWeight: weight === value ? 'bold' : 'normal',
-              color: weight === value ? theme.palette.primary.main : 'inherit',
+              transition: "all 0.2s ease",
+              fontWeight: weight === value ? "bold" : "normal",
+              color: weight === value ? theme.palette.primary.main : "inherit",
             }}
           >
             {weight} kg
           </Typography>
         ))}
       </Box>
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '10%',
-          right: '10%',
-          height: 2,
-          bgcolor: theme.palette.primary.main,
-          transform: 'translateY(-50%)',
-          opacity: 0.5,
-        }}
-      />
     </Box>
   );
-}; 
+};

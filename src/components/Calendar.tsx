@@ -21,8 +21,15 @@ import {
   useTheme,
   CircularProgress,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Snackbar,
+  Alert,
 } from "@mui/material";
-import { ChevronLeft, ChevronRight } from "@mui/icons-material";
+import { ChevronLeft, ChevronRight, Add as AddIcon } from "@mui/icons-material";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { LocalizationProvider } from "@mui/x-date-pickers";
@@ -34,6 +41,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { WorkoutRecord } from "@/types/workout";
 import { Timestamp } from "firebase/firestore";
 import { WorkoutSets } from "./WorkoutSets";
+import { WeightPicker } from "./WeightPicker";
+import { RepsPicker } from "./RepsPicker";
 
 interface CalendarProps {
   isDrawerOpen?: boolean;
@@ -41,7 +50,8 @@ interface CalendarProps {
 
 export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const theme = useTheme();
-  const { selectedDate, setSelectedDate, workouts } = useWorkoutStore();
+  const { selectedDate, setSelectedDate, workouts, updateWorkout, addWorkout } =
+    useWorkoutStore();
   const { user } = useAuth();
   const { calendarDisplayMode } = useSettingsStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -52,6 +62,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutRecord | null>(
     null
   );
+  const [addSetDialogOpen, setAddSetDialogOpen] = useState(false);
+  const [newSet, setNewSet] = useState({ weight: 25, reps: 0 });
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -97,13 +110,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     return () => unsubscribe();
   }, [user, currentMonth]);
 
-  useEffect(() => {
-    if (!loading) {
-      const today = new Date();
-      handleDateClick(today);
-    }
-  }, [loading]);
-
   const days = ["日", "月", "火", "水", "木", "金", "土"];
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -142,15 +148,67 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     setCurrentMonth((prev) => addMonths(prev, 1));
   };
 
-  const handleDateClick = (date: Date) => {
+  const handleDateClick = async (date: Date) => {
     setSelectedDate(date);
+    const dateKey = format(date, "yyyy-MM-dd");
+
+    // 選択した日付のワークアウトを検索
     const workout = workouts.find(
       (w) =>
         w.date instanceof Timestamp &&
         isValid(w.date.toDate()) &&
-        format(w.date.toDate(), "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+        format(w.date.toDate(), "yyyy-MM-dd") === dateKey
     );
-    setSelectedWorkout(workout || null);
+
+    if (workout) {
+      setSelectedWorkout(workout);
+    } else {
+      // ワークアウトが存在しない場合は新しいワークアウトを作成
+      const newWorkout: WorkoutRecord = {
+        id: "",
+        userId: user?.uid || "",
+        date: Timestamp.fromDate(date),
+        sets: [],
+        tags: [],
+        memo: "",
+        createdAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date()),
+      };
+      setSelectedWorkout(newWorkout);
+    }
+  };
+
+  const handleAddSet = async () => {
+    if (!selectedWorkout) return;
+
+    const updatedSets = [
+      ...selectedWorkout.sets,
+      {
+        weight: newSet.weight,
+        reps: newSet.reps,
+      },
+    ];
+
+    const updatedWorkout: WorkoutRecord = {
+      ...selectedWorkout,
+      sets: updatedSets,
+      updatedAt: Timestamp.fromDate(new Date()),
+    };
+
+    if (selectedWorkout.id) {
+      await updateWorkout(updatedWorkout);
+    } else {
+      await addWorkout(updatedWorkout);
+    }
+
+    // 状態を更新
+    setSelectedWorkout(updatedWorkout);
+    // スナックバーを表示
+    setSnackbarOpen(true);
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   if (loading) {
@@ -197,6 +255,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           const reps = getDayReps(date);
           const isCurrentMonth = isSameMonth(date, currentMonth);
           const isCurrentDay = isToday(date);
+          const isSelected =
+            selectedDate &&
+            format(selectedDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd");
 
           return (
             <Box key={index}>
@@ -209,7 +270,11 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   justifyContent: "center",
                   cursor: isDrawerOpen ? "default" : "pointer",
                   position: "relative",
-                  bgcolor: isCurrentDay ? "action.selected" : "transparent",
+                  bgcolor: isSelected
+                    ? "action.selected"
+                    : isCurrentDay
+                    ? "action.hover"
+                    : "transparent",
                   opacity: isCurrentMonth ? 1 : 0.5,
                   "&:hover": {
                     bgcolor: isDrawerOpen ? "transparent" : "action.hover",
@@ -219,8 +284,12 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                 <Typography
                   variant="body2"
                   sx={{
-                    color: isCurrentDay ? "primary.main" : "text.primary",
-                    fontWeight: isCurrentDay ? "bold" : "normal",
+                    color: isSelected
+                      ? "primary.main"
+                      : isCurrentDay
+                      ? "primary.main"
+                      : "text.primary",
+                    fontWeight: isSelected || isCurrentDay ? "bold" : "normal",
                   }}
                 >
                   {format(date, "d")}
@@ -258,6 +327,87 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           );
         })}
       </Box>
+
+      {selectedWorkout && (
+        <Box sx={{ mt: 2 }}>
+          <WorkoutSets
+            workout={selectedWorkout}
+            onDelete={async (workout) => {
+              await useWorkoutStore.getState().deleteWorkout(workout.id);
+              setSelectedWorkout(null);
+            }}
+            onAddSet={() => setAddSetDialogOpen(true)}
+          />
+        </Box>
+      )}
+
+      <Dialog
+        open={addSetDialogOpen}
+        onClose={() => setAddSetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>セットを追加</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 2 }}>
+            <Box sx={{ display: "flex", gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
+                  重量
+                </Typography>
+                <WeightPicker
+                  value={newSet.weight}
+                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  gutterBottom
+                >
+                  回数
+                </Typography>
+                <RepsPicker
+                  value={newSet.reps}
+                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
+                />
+              </Box>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddSetDialogOpen(false)}>閉じる</Button>
+          <Button
+            onClick={handleAddSet}
+            variant="contained"
+            color="primary"
+            disabled={newSet.reps === 0}
+          >
+            追加
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="success"
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          セットを追加しました
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

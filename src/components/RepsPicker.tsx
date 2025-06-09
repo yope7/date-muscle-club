@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { Box, Typography, useTheme, useMediaQuery } from '@mui/material';
+import React, { useState, useEffect, useRef } from "react";
+import { Box, Typography, useTheme, useMediaQuery } from "@mui/material";
 
 interface RepsPickerProps {
   value: number;
@@ -10,28 +10,25 @@ interface RepsPickerProps {
   max?: number;
 }
 
-export const RepsPicker = ({ 
-  value, 
-  onChange, 
-  min = 0, 
-  max = 30 
+export const RepsPicker = ({
+  value,
+  onChange,
+  min = 0,
+  max = 30,
 }: RepsPickerProps) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isDragging, setIsDragging] = useState(false);
   const [startY, setStartY] = useState(0);
   const [startValue, setStartValue] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 回数の選択肢を生成
-  const reps = Array.from(
-    { length: max - min + 1 },
-    (_, i) => min + i
-  );
+  const reps = Array.from({ length: max - min + 1 }, (_, i) => min + i);
 
   // 現在の値のインデックスを取得
   const getCurrentIndex = (val: number) => {
-    return reps.findIndex(r => r >= val) || 0;
+    return reps.findIndex((r) => r >= val) || 0;
   };
 
   const currentIndex = getCurrentIndex(value);
@@ -72,8 +69,8 @@ export const RepsPicker = ({
       onChange(newValue);
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
   }, [value, onChange, min, max]);
 
   return (
@@ -81,28 +78,28 @@ export const RepsPicker = ({
       ref={containerRef}
       sx={{
         height: isMobile ? 120 : 150,
-        overflow: 'hidden',
-        position: 'relative',
-        cursor: 'ns-resize',
-        userSelect: 'none',
-        touchAction: 'none',
+        overflow: "hidden",
+        position: "relative",
+        cursor: "ns-resize",
+        userSelect: "none",
+        touchAction: "none",
         bgcolor: theme.palette.background.paper,
         borderRadius: 1,
         border: `1px solid ${theme.palette.divider}`,
-        '&::before, &::after': {
+        "&::before, &::after": {
           content: '""',
-          position: 'absolute',
+          position: "absolute",
           left: 0,
           right: 0,
-          height: '40%',
-          pointerEvents: 'none',
+          height: "40%",
+          pointerEvents: "none",
           zIndex: 1,
         },
-        '&::before': {
+        "&::before": {
           top: 0,
           background: `linear-gradient(to bottom, ${theme.palette.background.paper}, transparent)`,
         },
-        '&::after': {
+        "&::after": {
           bottom: 0,
           background: `linear-gradient(to top, ${theme.palette.background.paper}, transparent)`,
         },
@@ -113,12 +110,12 @@ export const RepsPicker = ({
     >
       <Box
         sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100%',
-          py: 2,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          py: 1,
         }}
       >
         {visibleReps.map((rep) => (
@@ -126,30 +123,18 @@ export const RepsPicker = ({
             key={rep}
             variant={isMobile ? "h6" : "h5"}
             sx={{
-              my: 1,
+              my: 0.5,
               opacity: rep === value ? 1 : 0.3,
               transform: `scale(${rep === value ? 1 : 0.8})`,
-              transition: 'all 0.2s ease',
-              fontWeight: rep === value ? 'bold' : 'normal',
-              color: rep === value ? theme.palette.primary.main : 'inherit',
+              transition: "all 0.2s ease",
+              fontWeight: rep === value ? "bold" : "normal",
+              color: rep === value ? theme.palette.primary.main : "inherit",
             }}
           >
             {rep} 回
           </Typography>
         ))}
       </Box>
-      <Box
-        sx={{
-          position: 'absolute',
-          top: '50%',
-          left: '10%',
-          right: '10%',
-          height: 2,
-          bgcolor: theme.palette.primary.main,
-          transform: 'translateY(-50%)',
-          opacity: 0.5,
-        }}
-      />
     </Box>
   );
-}; 
+};
