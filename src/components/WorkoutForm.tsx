@@ -1,16 +1,16 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useState, useEffect } from 'react';
-import { format, isValid } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { useWorkoutStore } from '@/store/workoutStore';
-import { useAuth } from '@/hooks/useAuth';
-import { WorkoutRecord, WorkoutSet } from '@/types/workout';
-import { WeightPicker } from './WeightPicker';
-import { RepsPicker } from './RepsPicker';
-import dynamic from 'next/dynamic';
-import { Timestamp } from 'firebase/firestore';
+import React from "react";
+import { useState, useEffect } from "react";
+import { format, isValid } from "date-fns";
+import { ja } from "date-fns/locale";
+import { useWorkoutStore } from "@/store/workoutStore";
+import { useAuth } from "@/hooks/useAuth";
+import { WorkoutRecord, WorkoutSet } from "@/types/workout";
+import { WeightPicker } from "./WeightPicker";
+import { RepsPicker } from "./RepsPicker";
+import dynamic from "next/dynamic";
+import { Timestamp } from "firebase/firestore";
 import {
   Box,
   Typography,
@@ -30,16 +30,17 @@ import {
   DialogTitle,
   DialogActions,
   Fab,
-} from '@mui/material';
+} from "@mui/material";
 import {
   Add as AddIcon,
   Edit as EditIcon,
   LocalOffer as TagIcon,
   Notes as NotesIcon,
   Close as CloseIcon,
-} from '@mui/icons-material';
+  Delete as DeleteIcon,
+} from "@mui/icons-material";
 
-const DEFAULT_TAGS = ['新記録更新', '筋肉痛あり', '回数重視'];
+const DEFAULT_TAGS = ["新記録更新", "筋肉痛あり", "回数重視"];
 
 interface Props {
   onComplete?: () => void;
@@ -47,11 +48,12 @@ interface Props {
 
 const WorkoutForm = ({ onComplete }: Props) => {
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { user } = useAuth();
-  const { selectedDate, addWorkout, workouts } = useWorkoutStore();
+  const { selectedDate, addWorkout, workouts, updateWorkout, fetchWorkouts } =
+    useWorkoutStore();
   const [sets, setSets] = useState<WorkoutSet[]>([{ weight: 25, reps: 0 }]);
-  const [memo, setMemo] = useState('');
+  const [memo, setMemo] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [isTagDialogOpen, setIsTagDialogOpen] = useState(false);
   const [isMemoDialogOpen, setIsMemoDialogOpen] = useState(false);
@@ -61,11 +63,23 @@ const WorkoutForm = ({ onComplete }: Props) => {
     setIsMounted(true);
   }, []);
 
+  // 日付が変更された時にデータを再取得
+  useEffect(() => {
+    if (selectedDate && user) {
+      fetchWorkouts();
+    }
+  }, [selectedDate, user, fetchWorkouts]);
+
   if (!selectedDate || !user || !isMounted) return null;
 
   // 既存のワークアウトを取得
   const existingWorkout = workouts.find(
-    w => isValid(w.date) && isValid(selectedDate) && format(w.date, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd')
+    (w) =>
+      w.date instanceof Timestamp &&
+      isValid(w.date.toDate()) &&
+      isValid(selectedDate) &&
+      format(w.date.toDate(), "yyyy-MM-dd") ===
+        format(selectedDate, "yyyy-MM-dd")
   );
 
   const handleAddSet = () => {
@@ -73,7 +87,11 @@ const WorkoutForm = ({ onComplete }: Props) => {
     setSets([...sets, newSet]);
   };
 
-  const handleSetChange = (index: number, field: keyof WorkoutSet, value: number) => {
+  const handleSetChange = (
+    index: number,
+    field: keyof WorkoutSet,
+    value: number
+  ) => {
     const newSets = [...sets];
     newSets[index][field] = value;
     setSets(newSets);
@@ -81,7 +99,7 @@ const WorkoutForm = ({ onComplete }: Props) => {
 
   const toggleTag = (tag: string) => {
     if (tags.includes(tag)) {
-      setTags(tags.filter(t => t !== tag));
+      setTags(tags.filter((t) => t !== tag));
     } else {
       setTags([...tags, tag]);
     }
@@ -93,19 +111,28 @@ const WorkoutForm = ({ onComplete }: Props) => {
       return;
     }
 
+    // 既存のワークアウトを取得または新規作成
     const workout: WorkoutRecord = {
       id: existingWorkout?.id || crypto.randomUUID(),
       userId: user.uid,
-      date: selectedDate,
+      date: Timestamp.fromDate(selectedDate),
       sets: [...(existingWorkout?.sets || []), ...sets],
-      memo: existingWorkout?.memo || '',
+      memo: existingWorkout?.memo || "",
       tags: existingWorkout?.tags || [],
       createdAt: existingWorkout?.createdAt || Timestamp.fromDate(new Date()),
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    await addWorkout(workout);
-    
+    // 既存のワークアウトがある場合は更新、ない場合は新規作成
+    if (existingWorkout) {
+      await updateWorkout(workout);
+    } else {
+      await addWorkout(workout);
+    }
+
+    // セットの入力フォームをリセット
+    setSets([{ weight: 25, reps: 0 }]);
+
     if (onComplete) {
       onComplete();
     }
@@ -113,14 +140,14 @@ const WorkoutForm = ({ onComplete }: Props) => {
 
   const handleSaveMemo = () => {
     if (!isValid(selectedDate)) {
-      console.error('Invalid date:', selectedDate);
+      console.error("Invalid date:", selectedDate);
       return;
     }
 
     const workout: WorkoutRecord = {
       id: existingWorkout?.id || crypto.randomUUID(),
       userId: user.uid,
-      date: selectedDate,
+      date: Timestamp.fromDate(selectedDate),
       sets: existingWorkout?.sets || [],
       memo,
       tags: existingWorkout?.tags || [],
@@ -128,28 +155,36 @@ const WorkoutForm = ({ onComplete }: Props) => {
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    addWorkout(workout);
+    if (existingWorkout) {
+      updateWorkout(workout);
+    } else {
+      addWorkout(workout);
+    }
     setIsMemoDialogOpen(false);
   };
 
   const handleSaveTags = () => {
     if (!isValid(selectedDate)) {
-      console.error('Invalid date:', selectedDate);
+      console.error("Invalid date:", selectedDate);
       return;
     }
 
     const workout: WorkoutRecord = {
       id: existingWorkout?.id || crypto.randomUUID(),
       userId: user.uid,
-      date: selectedDate,
+      date: Timestamp.fromDate(selectedDate),
       sets: existingWorkout?.sets || [],
-      memo: existingWorkout?.memo || '',
+      memo: existingWorkout?.memo || "",
       tags,
       createdAt: existingWorkout?.createdAt || Timestamp.fromDate(new Date()),
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    addWorkout(workout);
+    if (existingWorkout) {
+      updateWorkout(workout);
+    } else {
+      addWorkout(workout);
+    }
     setIsTagDialogOpen(false);
   };
 
@@ -158,7 +193,7 @@ const WorkoutForm = ({ onComplete }: Props) => {
     if (!user || !selectedDate) return;
 
     const workout: WorkoutRecord = {
-      id: '',
+      id: "",
       userId: user.uid,
       date: Timestamp.fromDate(selectedDate),
       sets,
@@ -170,8 +205,26 @@ const WorkoutForm = ({ onComplete }: Props) => {
 
     await addWorkout(workout);
     setSets([{ weight: 25, reps: 0 }]);
-    setMemo('');
+    setMemo("");
     setTags([]);
+  };
+
+  const handleDeleteSet = async (indexToDelete: number) => {
+    if (!existingWorkout) return;
+
+    // 指定されたインデックスのセットを除外した新しいセット配列を作成
+    const updatedSets = existingWorkout.sets.filter(
+      (_, index) => index !== indexToDelete
+    );
+
+    // ワークアウトを更新
+    const workout: WorkoutRecord = {
+      ...existingWorkout,
+      sets: updatedSets,
+      updatedAt: Timestamp.fromDate(new Date()),
+    };
+
+    await updateWorkout(workout);
   };
 
   return (
@@ -179,14 +232,16 @@ const WorkoutForm = ({ onComplete }: Props) => {
       <AppBar position="sticky" color="inherit" elevation={0}>
         <Toolbar>
           <Typography variant="h6" sx={{ flex: 1 }}>
-            {isValid(selectedDate) ? format(selectedDate, 'yyyy年M月d日', { locale: ja }) : '日付が無効です'}
+            {isValid(selectedDate)
+              ? format(selectedDate, "yyyy年M月d日", { locale: ja })
+              : "日付が無効です"}
           </Typography>
           <IconButton edge="end" onClick={onComplete} aria-label="閉じる">
             <CloseIcon />
           </IconButton>
         </Toolbar>
       </AppBar>
-      
+
       <Container maxWidth="sm" sx={{ py: 2 }}>
         <Stack spacing={2}>
           {existingWorkout && (
@@ -200,19 +255,76 @@ const WorkoutForm = ({ onComplete }: Props) => {
                     key={index}
                     sx={{
                       p: 1.5,
-                      bgcolor: 'grey.900',
+                      bgcolor: "grey.900",
                       borderRadius: 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 2,
                     }}
                   >
-                    <Typography>
-                      {set.weight}kg × {set.reps}回
-                    </Typography>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 2,
+                        flex: 1,
+                      }}
+                    >
+                      <Typography variant="subtitle2" color="white">
+                        セット {index + 1}:
+                      </Typography>
+                      <Typography color="white">
+                        {set.weight}kg × {set.reps}回
+                      </Typography>
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDeleteSet(index)}
+                      sx={{
+                        color: "error.main",
+                        "&:hover": {
+                          backgroundColor: "error.dark",
+                          color: "error.main",
+                        },
+                      }}
+                      aria-label={`セット ${index + 1} を削除`}
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </Box>
                 ))}
               </Stack>
+              {existingWorkout.memo && (
+                <Box mt={2}>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    メモ
+                  </Typography>
+                  <Typography variant="body2">
+                    {existingWorkout.memo}
+                  </Typography>
+                </Box>
+              )}
+              {existingWorkout.tags.length > 0 && (
+                <Box mt={2}>
+                  <Typography
+                    variant="subtitle2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    タグ
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {existingWorkout.tags.map((tag) => (
+                      <Chip key={tag} label={tag} size="small" sx={{ mt: 1 }} />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
             </Box>
           )}
 
@@ -226,28 +338,40 @@ const WorkoutForm = ({ onComplete }: Props) => {
                   key={index}
                   sx={{
                     p: isMobile ? 1.5 : 2,
-                    bgcolor: 'grey.900',
+                    bgcolor: "grey.900",
                     borderRadius: 1,
-                    position: 'relative',
+                    position: "relative",
                   }}
                 >
-                  <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Box sx={{ display: "flex", gap: 2 }}>
                     <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        gutterBottom
+                      >
                         重量
                       </Typography>
                       <WeightPicker
                         value={set.weight}
-                        onChange={(value) => handleSetChange(index, 'weight', value)}
+                        onChange={(value) =>
+                          handleSetChange(index, "weight", value)
+                        }
                       />
                     </Box>
                     <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        gutterBottom
+                      >
                         回数
                       </Typography>
                       <RepsPicker
                         value={set.reps}
-                        onChange={(value) => handleSetChange(index, 'reps', value)}
+                        onChange={(value) =>
+                          handleSetChange(index, "reps", value)
+                        }
                       />
                     </Box>
                   </Box>
@@ -280,11 +404,11 @@ const WorkoutForm = ({ onComplete }: Props) => {
 
       <Box
         sx={{
-          position: 'fixed',
+          position: "fixed",
           bottom: 16,
           right: 16,
-          display: 'flex',
-          flexDirection: 'column',
+          display: "flex",
+          flexDirection: "column",
           gap: 2,
         }}
       >
@@ -304,7 +428,10 @@ const WorkoutForm = ({ onComplete }: Props) => {
         </Fab>
       </Box>
 
-      <Dialog open={isMemoDialogOpen} onClose={() => setIsMemoDialogOpen(false)}>
+      <Dialog
+        open={isMemoDialogOpen}
+        onClose={() => setIsMemoDialogOpen(false)}
+      >
         <DialogTitle>メモを追加</DialogTitle>
         <DialogContent>
           <TextField
@@ -338,7 +465,7 @@ const WorkoutForm = ({ onComplete }: Props) => {
                   key={tag}
                   label={tag}
                   onClick={() => toggleTag(tag)}
-                  color={tags.includes(tag) ? 'primary' : 'default'}
+                  color={tags.includes(tag) ? "primary" : "default"}
                   sx={{ m: 0.5 }}
                 />
               ))}
@@ -356,4 +483,4 @@ const WorkoutForm = ({ onComplete }: Props) => {
   );
 };
 
-export default dynamic(() => Promise.resolve(WorkoutForm), { ssr: false }); 
+export default dynamic(() => Promise.resolve(WorkoutForm), { ssr: false });

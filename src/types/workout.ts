@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from "firebase/firestore";
 
 export interface WorkoutSet {
   weight: number;
@@ -34,4 +34,4 @@ export type User = {
   sharedWith: string[];
   createdAt: Date;
   updatedAt: Date;
-}; 
+};

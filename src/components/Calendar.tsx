@@ -1,28 +1,53 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, isValid } from 'date-fns';
-import { ja } from 'date-fns/locale';
-import { Box, Typography, Grid, IconButton, useTheme, CircularProgress } from '@mui/material';
-import { ChevronLeft, ChevronRight } from '@mui/icons-material';
-import { useWorkoutStore } from '@/store/workoutStore';
-import { useSettingsStore } from '@/store/settingsStore';
-import { LocalizationProvider } from '@mui/x-date-pickers';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import WhatshotIcon from '@mui/icons-material/Whatshot';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from '@/hooks/useAuth';
+import React, { useState, useEffect } from "react";
+import {
+  format,
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  isSameMonth,
+  isToday,
+  addMonths,
+  subMonths,
+  isValid,
+} from "date-fns";
+import { ja } from "date-fns/locale";
+import {
+  Box,
+  Typography,
+  Grid,
+  IconButton,
+  useTheme,
+  CircularProgress,
+  Stack,
+} from "@mui/material";
+import { ChevronLeft, ChevronRight } from "@mui/icons-material";
+import { useWorkoutStore } from "@/store/workoutStore";
+import { useSettingsStore } from "@/store/settingsStore";
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import WhatshotIcon from "@mui/icons-material/Whatshot";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "@/hooks/useAuth";
+import { WorkoutRecord } from "@/types/workout";
+import { Timestamp } from "firebase/firestore";
+import { WorkoutSets } from "./WorkoutSets";
 
 export const Calendar = () => {
   const theme = useTheme();
-  const { selectedDate, setSelectedDate } = useWorkoutStore();
+  const { selectedDate, setSelectedDate, workouts } = useWorkoutStore();
   const { user } = useAuth();
-  const workouts = useWorkoutStore(state => state.workouts);
   const { calendarDisplayMode } = useSettingsStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
-  const [monthWorkouts, setMonthWorkouts] = useState<{[key: string]: number}>({});
+  const [monthWorkouts, setMonthWorkouts] = useState<{ [key: string]: number }>(
+    {}
+  );
+  const [selectedWorkout, setSelectedWorkout] = useState<WorkoutRecord | null>(
+    null
+  );
 
   useEffect(() => {
     if (!user) {
@@ -34,33 +59,41 @@ export const Calendar = () => {
     const endDate = endOfMonth(currentMonth);
 
     const q = query(
-      collection(db, 'users', user.uid, 'workouts'),
-      where('date', '>=', startDate),
-      where('date', '<=', endDate)
+      collection(db, "users", user.uid, "workouts"),
+      where("date", ">=", startDate),
+      where("date", "<=", endDate)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const workoutMap: {[key: string]: number} = {};
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        const date = data.date?.toDate();
-        if (date) {
-          const dateKey = format(date, 'yyyy-MM-dd');
-          const totalReps = data.sets?.reduce((sum: number, set: any) => sum + (set.reps || 0), 0) || 0;
-          workoutMap[dateKey] = totalReps;
-        }
-      });
-      setMonthWorkouts(workoutMap);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching workouts:', error);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const workoutMap: { [key: string]: number } = {};
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const date = data.date?.toDate();
+          if (date) {
+            const dateKey = format(date, "yyyy-MM-dd");
+            const totalReps =
+              data.sets?.reduce(
+                (sum: number, set: any) => sum + (set.reps || 0),
+                0
+              ) || 0;
+            workoutMap[dateKey] = totalReps;
+          }
+        });
+        setMonthWorkouts(workoutMap);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching workouts:", error);
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user, currentMonth]);
 
-  const days = ['日', '月', '火', '水', '木', '金', '土'];
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const startDate = new Date(monthStart);
@@ -72,12 +105,12 @@ export const Calendar = () => {
 
   const getDayReps = (date: Date) => {
     if (!isValid(date)) return 0;
-    const dateKey = format(date, 'yyyy-MM-dd');
+    const dateKey = format(date, "yyyy-MM-dd");
     return monthWorkouts[dateKey] || 0;
   };
 
   const getDayColor = (reps: number) => {
-    if (reps === 0) return 'transparent';
+    if (reps === 0) return "transparent";
     if (reps < 10) return theme.palette.success.light;
     if (reps < 20) return theme.palette.success.main;
     return theme.palette.success.dark;
@@ -91,38 +124,58 @@ export const Calendar = () => {
   };
 
   const handlePrevMonth = () => {
-    setCurrentMonth(prev => subMonths(prev, 1));
+    setCurrentMonth((prev) => subMonths(prev, 1));
   };
 
   const handleNextMonth = () => {
-    setCurrentMonth(prev => addMonths(prev, 1));
+    setCurrentMonth((prev) => addMonths(prev, 1));
+  };
+
+  const handleDateClick = (date: Date) => {
+    setSelectedDate(date);
+    const workout = workouts.find(
+      (w) =>
+        w.date instanceof Timestamp &&
+        isValid(w.date.toDate()) &&
+        format(w.date.toDate(), "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
+    );
+    setSelectedWorkout(workout || null);
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
         <CircularProgress />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+    <Box sx={{ width: "100%" }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 2,
+        }}
+      >
         <IconButton onClick={handlePrevMonth}>
           <ChevronLeft />
         </IconButton>
         <Typography variant="h6">
-          {format(currentMonth, 'yyyy年M月', { locale: ja })}
+          {format(currentMonth, "yyyy年M月", { locale: ja })}
         </Typography>
         <IconButton onClick={handleNextMonth}>
           <ChevronRight />
         </IconButton>
       </Box>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 1 }}>
-        {days.map(day => (
-          <Box key={day} sx={{ textAlign: 'center', py: 1 }}>
+      <Box
+        sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}
+      >
+        {days.map((day) => (
+          <Box key={day} sx={{ textAlign: "center", py: 1 }}>
             <Typography variant="body2" color="text.secondary">
               {day}
             </Typography>
@@ -137,39 +190,39 @@ export const Calendar = () => {
           return (
             <Box key={index}>
               <Box
-                onClick={() => setSelectedDate(date)}
+                onClick={() => handleDateClick(date)}
                 sx={{
-                  aspectRatio: '1',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  position: 'relative',
-                  bgcolor: isCurrentDay ? 'action.selected' : 'transparent',
+                  aspectRatio: "1",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  cursor: "pointer",
+                  position: "relative",
+                  bgcolor: isCurrentDay ? "action.selected" : "transparent",
                   opacity: isCurrentMonth ? 1 : 0.5,
-                  '&:hover': {
-                    bgcolor: 'action.hover',
+                  "&:hover": {
+                    bgcolor: "action.hover",
                   },
                 }}
               >
                 <Typography
                   variant="body2"
                   sx={{
-                    color: isCurrentDay ? 'primary.main' : 'text.primary',
-                    fontWeight: isCurrentDay ? 'bold' : 'normal',
+                    color: isCurrentDay ? "primary.main" : "text.primary",
+                    fontWeight: isCurrentDay ? "bold" : "normal",
                   }}
                 >
-                  {format(date, 'd')}
+                  {format(date, "d")}
                 </Typography>
 
-                {calendarDisplayMode === 'color' ? (
+                {calendarDisplayMode === "color" ? (
                   <Box
                     sx={{
-                      position: 'absolute',
+                      position: "absolute",
                       bottom: 2,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '80%',
+                      left: "50%",
+                      transform: "translateX(-50%)",
+                      width: "80%",
                       height: 4,
                       bgcolor: getDayColor(reps),
                       borderRadius: 1,
@@ -179,10 +232,10 @@ export const Calendar = () => {
                   reps > 0 && (
                     <WhatshotIcon
                       sx={{
-                        position: 'absolute',
+                        position: "absolute",
                         bottom: 2,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
+                        left: "50%",
+                        transform: "translateX(-50%)",
                         color: theme.palette.warning.main,
                         fontSize: `${getFireSize(reps)}rem`,
                       }}
@@ -196,4 +249,4 @@ export const Calendar = () => {
       </Box>
     </Box>
   );
-}; 
+};

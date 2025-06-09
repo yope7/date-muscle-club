@@ -1,14 +1,14 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Workout, WorkoutSet, WorkoutRecord } from '@/types/workout';
-import { useAuth } from '@/hooks/useAuth';
-import { 
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import { Workout, WorkoutSet, WorkoutRecord } from "@/types/workout";
+import { useAuth } from "@/hooks/useAuth";
+import {
   fetchWorkouts,
   addWorkout,
   updateWorkout,
   deleteWorkout,
-  resetUserData
-} from '@/lib/firestore';
+  resetUserData,
+} from "@/lib/firestore";
 
 interface WorkoutState {
   workouts: WorkoutRecord[];
@@ -31,7 +31,12 @@ export const useWorkoutStore = create<WorkoutState>()(
       error: null,
       selectedDate: null,
 
-      setSelectedDate: (date: Date | null) => set({ selectedDate: date }),
+      setSelectedDate: (date: Date | null) => {
+        set({ selectedDate: date });
+        if (date) {
+          get().fetchWorkouts();
+        }
+      },
 
       fetchWorkouts: async () => {
         const user = useAuth.getState().user;
@@ -42,9 +47,12 @@ export const useWorkoutStore = create<WorkoutState>()(
           const workouts = await fetchWorkouts(user.uid);
           set({ workouts, loading: false });
         } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to fetch workouts',
-            loading: false 
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to fetch workouts",
+            loading: false,
           });
         }
       },
@@ -56,14 +64,13 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ loading: true, error: null });
         try {
           const newWorkout = await addWorkout(workout);
-          set(state => ({
-            workouts: [...state.workouts, newWorkout],
-            loading: false
-          }));
+          await get().fetchWorkouts();
+          set({ loading: false });
         } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to add workout',
-            loading: false 
+          set({
+            error:
+              error instanceof Error ? error.message : "Failed to add workout",
+            loading: false,
           });
         }
       },
@@ -75,16 +82,15 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ loading: true, error: null });
         try {
           await updateWorkout(workout);
-          set(state => ({
-            workouts: state.workouts.map(w => 
-              w.id === workout.id ? workout : w
-            ),
-            loading: false
-          }));
+          await get().fetchWorkouts();
+          set({ loading: false });
         } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to update workout',
-            loading: false 
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to update workout",
+            loading: false,
           });
         }
       },
@@ -96,14 +102,15 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ loading: true, error: null });
         try {
           await deleteWorkout(user.uid, id);
-          set(state => ({
-            workouts: state.workouts.filter(w => w.id !== id),
-            loading: false
-          }));
+          await get().fetchWorkouts();
+          set({ loading: false });
         } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to delete workout',
-            loading: false 
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to delete workout",
+            loading: false,
           });
         }
       },
@@ -117,19 +124,19 @@ export const useWorkoutStore = create<WorkoutState>()(
           await resetUserData(user.uid);
           set({ workouts: [], loading: false });
         } catch (error) {
-          set({ 
-            error: error instanceof Error ? error.message : 'Failed to reset data',
-            loading: false 
+          set({
+            error:
+              error instanceof Error ? error.message : "Failed to reset data",
+            loading: false,
           });
         }
       },
     }),
     {
-      name: 'workout-storage',
-      partialize: (state) => ({ 
-        workouts: state.workouts,
-        selectedDate: state.selectedDate 
+      name: "workout-storage",
+      partialize: (state) => ({
+        selectedDate: state.selectedDate,
       }),
     }
   )
-); 
+);
