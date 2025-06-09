@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -32,13 +32,50 @@ import { useAuth } from "@/hooks/useAuth";
 
 interface FeedProps {
   workouts: WorkoutRecord[];
+  onRefresh?: () => Promise<void>;
 }
 
-export const Feed = ({ workouts }: FeedProps) => {
+export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const { user } = useAuth();
   const { profile, fetchProfile, friends, fetchFriends } = useUserStore();
   const { friendWorkouts, fetchFriendWorkouts, isLoading, error } =
     useWorkoutStore();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pullDistance, setPullDistance] = useState(0);
+  const startY = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 100;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (containerRef.current?.scrollTop === 0) {
+      startY.current = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (startY.current === null) return;
+
+    const currentY = e.touches[0].clientY;
+    const distance = currentY - startY.current;
+
+    if (distance > 0) {
+      e.preventDefault();
+      setPullDistance(Math.min(distance * 0.5, PULL_THRESHOLD));
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (pullDistance >= PULL_THRESHOLD && onRefresh) {
+      setIsRefreshing(true);
+      try {
+        await onRefresh();
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+    setPullDistance(0);
+    startY.current = null;
+  };
 
   useEffect(() => {
     if (user) {
@@ -101,99 +138,146 @@ export const Feed = ({ workouts }: FeedProps) => {
   );
 
   return (
-    <List>
-      {allWorkouts.map((workout) => {
-        const userInfo = getUserInfo(workout.userId);
-        return (
-          <Paper
-            key={workout.id}
+    <Box
+      ref={containerRef}
+      sx={{
+        height: "100%",
+        overflow: "auto",
+        position: "relative",
+        touchAction: "pan-y",
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <Box
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          height: pullDistance,
+          transform: `translateY(${pullDistance}px)`,
+          transition: "transform 0.2s ease-out",
+        }}
+      >
+        {isRefreshing ? (
+          <CircularProgress size={24} />
+        ) : (
+          <Typography
+            variant="body2"
+            color="text.secondary"
             sx={{
-              mb: 2,
-              borderRadius: 2,
-              overflow: "hidden",
+              opacity: pullDistance / PULL_THRESHOLD,
             }}
           >
-            <ListItem
-              alignItems="flex-start"
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-                p: 2,
-              }}
-            >
-              <Box
+            引っ張って更新
+          </Typography>
+        )}
+      </Box>
+
+      <List sx={{ pt: pullDistance }}>
+        {allWorkouts.map((workout, index) => {
+          const userInfo = getUserInfo(workout.userId);
+          return (
+            <React.Fragment key={workout.id}>
+              <Paper
                 sx={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  mb: 1,
+                  mb: 2,
+                  borderRadius: 2,
+                  overflow: "hidden",
                 }}
               >
-                <ListItemAvatar>
-                  <Avatar src={userInfo?.photoURL || undefined}>
-                    {userInfo?.displayName?.charAt(0).toUpperCase() || "?"}
-                  </Avatar>
-                </ListItemAvatar>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" fontWeight="bold">
-                    {userInfo?.displayName || "不明なユーザー"}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {format(workout.date.toDate(), "yyyy年M月d日 HH:mm", {
-                      locale: ja,
-                    })}
-                  </Typography>
-                </Box>
-              </Box>
-
-              <Box sx={{ width: "100%", mb: 2 }}>
-                <Typography variant="body1" sx={{ mb: 1 }}>
-                  ベンチプレス{" "}
-                  {workout.sets?.reduce((sum, set) => sum + (set.reps || 0), 0)}
-                  回
-                </Typography>
-                {workout.sets?.map((set, index) => (
-                  <Chip
-                    key={index}
-                    label={`${set.weight}kg × ${set.reps}回`}
-                    size="small"
-                    sx={{ mr: 1, mb: 1 }}
-                  />
-                ))}
-                {workout.memo && (
-                  <Typography
-                    variant="body2"
-                    color="text.secondary"
-                    sx={{ mt: 1 }}
+                <ListItem
+                  alignItems="flex-start"
+                  sx={{
+                    display: "flex",
+                    flexDirection: "column",
+                    p: 2,
+                  }}
+                >
+                  <Box
+                    sx={{
+                      width: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      mb: 1,
+                    }}
                   >
-                    {workout.memo}
-                  </Typography>
-                )}
-              </Box>
+                    <ListItemAvatar>
+                      <Avatar src={userInfo?.photoURL || undefined}>
+                        {userInfo?.displayName?.charAt(0).toUpperCase() || "?"}
+                      </Avatar>
+                    </ListItemAvatar>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        {userInfo?.displayName || "不明なユーザー"}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {format(workout.date.toDate(), "yyyy年M月d日 HH:mm", {
+                          locale: ja,
+                        })}
+                      </Typography>
+                    </Box>
+                  </Box>
 
-              <Divider sx={{ width: "100%", mb: 1 }} />
+                  <Box sx={{ width: "100%", mb: 2 }}>
+                    <Typography variant="body1" sx={{ mb: 1 }}>
+                      ベンチプレス{" "}
+                      {workout.sets?.reduce(
+                        (sum, set) => sum + (set.reps || 0),
+                        0
+                      )}
+                      回
+                    </Typography>
+                    {workout.sets?.map((set, setIndex) => (
+                      <Chip
+                        key={setIndex}
+                        label={`${set.weight}kg × ${set.reps}回`}
+                        size="small"
+                        sx={{ mr: 1, mb: 1 }}
+                      />
+                    ))}
+                    {workout.memo && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ mt: 1 }}
+                      >
+                        {workout.memo}
+                      </Typography>
+                    )}
+                  </Box>
 
-              <Box
-                sx={{
-                  width: "100%",
-                  display: "flex",
-                  justifyContent: "space-around",
-                }}
-              >
-                <IconButton size="small">
-                  <FavoriteBorderIcon />
-                </IconButton>
-                <IconButton size="small">
-                  <CommentIcon />
-                </IconButton>
-                <IconButton size="small">
-                  <ShareIcon />
-                </IconButton>
-              </Box>
-            </ListItem>
-          </Paper>
-        );
-      })}
-    </List>
+                  <Divider sx={{ width: "100%", mb: 1 }} />
+
+                  <Box
+                    sx={{
+                      width: "100%",
+                      display: "flex",
+                      justifyContent: "space-around",
+                    }}
+                  >
+                    <IconButton size="small">
+                      <FavoriteBorderIcon />
+                    </IconButton>
+                    <IconButton size="small">
+                      <CommentIcon />
+                    </IconButton>
+                    <IconButton size="small">
+                      <ShareIcon />
+                    </IconButton>
+                  </Box>
+                </ListItem>
+              </Paper>
+              {index < allWorkouts.length - 1 && <Divider />}
+            </React.Fragment>
+          );
+        })}
+      </List>
+    </Box>
   );
 };
