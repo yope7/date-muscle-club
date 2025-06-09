@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Drawer,
   List,
@@ -42,6 +42,8 @@ import { InviteFriend } from "./InviteFriend";
 import { useUserStore } from "@/store/userStore";
 import { FriendsList } from "./FriendsList";
 import { InviteList } from "./InviteList";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface SettingsDrawerProps {
   open: boolean;
@@ -59,6 +61,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [inviteListOpen, setInviteListOpen] = useState(false);
+  const [hasPendingInvites, setHasPendingInvites] = useState(false);
   const { resetData } = useWorkoutStore();
 
   const handleSettingsOpen = () => {
@@ -105,6 +108,22 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     await resetData();
     handleResetClose();
   };
+
+  useEffect(() => {
+    if (!user?.email) return;
+
+    const q = query(
+      collection(db, "invites"),
+      where("toEmail", "==", user.email),
+      where("status", "==", "pending")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasPendingInvites(!snapshot.empty);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   return (
     <>
@@ -164,7 +183,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           </ListItemButton>
           <ListItemButton onClick={handleInviteListOpen}>
             <ListItemIcon>
-              <Badge color="error" variant="dot">
+              <Badge color="error" variant="dot" invisible={!hasPendingInvites}>
                 <MailIcon />
               </Badge>
             </ListItemIcon>
