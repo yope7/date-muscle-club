@@ -28,6 +28,8 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { useDrawerStore } from "@/store/drawerStore";
 import { useUserStore } from "@/store/userStore";
 import { ProfileDialog } from "@/components/ProfileDialog";
+import { useTheme } from "@mui/material/styles";
+import { useMediaQuery } from "@mui/material";
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -35,22 +37,15 @@ interface ClientLayoutProps {
 
 export const ClientLayout = ({ children }: ClientLayoutProps) => {
   const { user, signOut } = useAuth();
+  const { profile } = useUserStore();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
-  const { isDrawerOpen, setDrawerOpen } = useDrawerStore();
-  const { profile, fetchProfile } = useUserStore();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile(user.uid);
-    }
-  }, [user, fetchProfile]);
-
-  useEffect(() => {
-    if (user && profile === null) {
-      setIsProfileDialogOpen(true);
-    }
-  }, [user, profile]);
+  const handleDrawerToggle = () => {
+    setDrawerOpen(!drawerOpen);
+  };
 
   const handleSignOut = async () => {
     await signOut();
@@ -63,7 +58,7 @@ export const ClientLayout = ({ children }: ClientLayoutProps) => {
       <div role="main">{children}</div>
       <SwipeableDrawer
         anchor="left"
-        open={isDrawerOpen}
+        open={drawerOpen}
         onOpen={() => setDrawerOpen(true)}
         onClose={() => setDrawerOpen(false)}
         sx={{
@@ -155,11 +150,6 @@ export const ClientLayout = ({ children }: ClientLayoutProps) => {
       <SettingsDialog
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-      />
-      <ProfileDialog
-        open={isProfileDialogOpen}
-        onClose={() => setIsProfileDialogOpen(false)}
-        isInitialSetup={profile === null}
       />
     </>
   );

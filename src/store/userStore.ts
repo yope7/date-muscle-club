@@ -70,49 +70,23 @@ export const useUserStore = create<UserState>((set) => ({
         return;
       }
 
-      // 自分が共有されている友達を取得
-      const sharedWithMeQuery = query(
-        collection(db, "shares"),
-        where("toUserId", "==", user.uid)
+      // 友達リストを取得
+      const friendsQuery = query(
+        collection(db, "friends"),
+        where("userId", "==", user.uid)
       );
 
-      // 自分が共有している友達を取得
-      const sharedByMeQuery = query(
-        collection(db, "shares"),
-        where("fromUserId", "==", user.uid)
-      );
-
-      const [sharedWithMeSnapshot, sharedByMeSnapshot] = await Promise.all([
-        getDocs(sharedWithMeQuery),
-        getDocs(sharedByMeQuery),
-      ]);
-
-      const friends = new Map<
-        string,
-        { id: string; displayName: string; photoURL?: string }
-      >();
-
-      // 自分が共有されている友達の情報を取得
-      sharedWithMeSnapshot.forEach((doc) => {
+      const snapshot = await getDocs(friendsQuery);
+      const friends = snapshot.docs.map((doc) => {
         const data = doc.data();
-        friends.set(data.fromUserId, {
-          id: data.fromUserId,
-          displayName: data.fromUserDisplayName || "不明なユーザー",
-          photoURL: data.fromUserPhotoURL,
-        });
+        return {
+          id: data.friendId,
+          displayName: data.friendDisplayName || "不明なユーザー",
+          photoURL: data.friendPhotoURL,
+        };
       });
 
-      // 自分が共有している友達の情報を取得
-      sharedByMeSnapshot.forEach((doc) => {
-        const data = doc.data();
-        friends.set(data.toUserId, {
-          id: data.toUserId,
-          displayName: data.toUserDisplayName || "不明なユーザー",
-          photoURL: data.toUserPhotoURL,
-        });
-      });
-
-      set({ friends: Array.from(friends.values()), isLoading: false });
+      set({ friends, isLoading: false });
     } catch (error) {
       console.error("Error fetching friends:", error);
       set({ error: "フレンドの取得に失敗しました" });

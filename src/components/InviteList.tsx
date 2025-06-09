@@ -24,6 +24,7 @@ import {
   serverTimestamp,
   addDoc,
   getDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -35,6 +36,8 @@ interface Invite {
   status: "pending" | "accepted" | "rejected";
   createdAt: Date;
   updatedAt: Date;
+  fromUserDisplayName: string;
+  fromUserPhotoURL: string;
 }
 
 export const InviteList: React.FC = () => {
@@ -67,6 +70,8 @@ export const InviteList: React.FC = () => {
             status: data.status,
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
+            fromUserDisplayName: data.fromUserDisplayName,
+            fromUserPhotoURL: data.fromUserPhotoURL,
           });
         });
         setInvites(inviteList);
@@ -82,55 +87,48 @@ export const InviteList: React.FC = () => {
     return () => unsubscribe();
   }, [user?.email]);
 
-  const handleInvite = async (inviteId: string, accept: boolean) => {
+  const handleInvite = async (invite: Invite) => {
     if (!user) return;
 
     try {
-      const inviteRef = doc(db, "invites", inviteId);
-      const inviteDoc = await getDoc(inviteRef);
-
-      if (!inviteDoc.exists()) {
-        throw new Error("招待が見つかりません");
-      }
-
-      const inviteData = inviteDoc.data();
-      await updateDoc(inviteRef, {
-        status: accept ? "accepted" : "rejected",
-        updatedAt: serverTimestamp(),
+      // 招待を承認
+      await updateDoc(doc(db, "invites", invite.id), {
+        status: "accepted",
       });
 
-      if (accept) {
-        // 共有設定を追加
-        await addDoc(collection(db, "shares"), {
-          fromUserId: inviteData.fromUserId,
-          toUserId: user.uid,
-          fromUserEmail: inviteData.fromUserEmail,
-          toUserEmail: user.email,
-          fromUserDisplayName: user.displayName,
-          fromUserPhotoURL: user.photoURL,
-          toUserDisplayName: user.displayName,
-          toUserPhotoURL: user.photoURL,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+      // 友達関係を相互に作成
+      const batch = writeBatch(db);
 
-        setSuccess("招待を承認しました");
-      } else {
-        setSuccess("招待を拒否しました");
-      }
+      // 自分から相手への友達関係
+      const myFriendRef = doc(collection(db, "friends"));
+      batch.set(myFriendRef, {
+        userId: user.uid,
+        friendId: invite.fromUserId,
+        friendEmail: invite.fromUserEmail,
+        friendDisplayName:
+          invite.fromUserDisplayName || invite.fromUserEmail.split("@")[0],
+        friendPhotoURL: invite.fromUserPhotoURL || null,
+        createdAt: serverTimestamp(),
+      });
 
-      // 招待リストから該当の招待を削除
-      setInvites((prevInvites) =>
-        prevInvites.filter((invite) => invite.id !== inviteId)
-      );
+      // 相手から自分への友達関係
+      const theirFriendRef = doc(collection(db, "friends"));
+      batch.set(theirFriendRef, {
+        userId: invite.fromUserId,
+        friendId: user.uid,
+        friendEmail: user.email || "",
+        friendDisplayName:
+          user.displayName || user.email?.split("@")[0] || "ユーザー",
+        friendPhotoURL: user.photoURL || null,
+        createdAt: serverTimestamp(),
+      });
 
-      // 3秒後にメッセージを消す
-      setTimeout(() => {
-        setSuccess(null);
-      }, 3000);
+      await batch.commit();
+
+      setSuccess("招待を承認しました");
     } catch (err) {
-      console.error("Error handling invite:", err);
-      setError("招待の処理に失敗しました");
+      console.error("Error accepting invite:", err);
+      setError("招待の承認に失敗しました");
     }
   };
 
@@ -171,16 +169,10 @@ export const InviteList: React.FC = () => {
                 <Box>
                   <Button
                     color="primary"
-                    onClick={() => handleInvite(invite.id, true)}
+                    onClick={() => handleInvite(invite)}
                     sx={{ mr: 1 }}
                   >
                     承認
-                  </Button>
-                  <Button
-                    color="error"
-                    onClick={() => handleInvite(invite.id, false)}
-                  >
-                    拒否
                   </Button>
                 </Box>
               }

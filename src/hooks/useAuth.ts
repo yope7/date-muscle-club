@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect } from "react";
 import {
   User,
   GoogleAuthProvider,
@@ -8,9 +8,9 @@ import {
   signInAnonymously,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-} from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { create } from 'zustand';
+} from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { create } from "zustand";
 
 interface AuthState {
   user: User | null;
@@ -33,13 +33,16 @@ const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error('Error signing in with Google:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        set({ error: 'ログインがキャンセルされました' });
-      } else if (error.code === 'auth/popup-blocked') {
-        set({ error: 'ポップアップがブロックされています。ブラウザの設定を確認してください' });
+      console.error("Error signing in with Google:", error);
+      if (error.code === "auth/popup-closed-by-user") {
+        set({ error: "ログインがキャンセルされました" });
+      } else if (error.code === "auth/popup-blocked") {
+        set({
+          error:
+            "ポップアップがブロックされています。ブラウザの設定を確認してください",
+        });
       } else {
-        set({ error: 'ログインに失敗しました。もう一度お試しください' });
+        set({ error: "ログインに失敗しました。もう一度お試しください" });
       }
     } finally {
       set({ loading: false });
@@ -50,8 +53,8 @@ const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInAnonymously(auth);
     } catch (error) {
-      console.error('Error signing in as guest:', error);
-      set({ error: 'ゲストログインに失敗しました' });
+      console.error("Error signing in as guest:", error);
+      set({ error: "ゲストログインに失敗しました" });
     } finally {
       set({ loading: false });
     }
@@ -61,8 +64,8 @@ const useAuthStore = create<AuthState>((set) => ({
     try {
       await firebaseSignOut(auth);
     } catch (error) {
-      console.error('Error signing out:', error);
-      set({ error: 'ログアウトに失敗しました' });
+      console.error("Error signing out:", error);
+      set({ error: "ログアウトに失敗しました" });
     } finally {
       set({ loading: false });
     }
@@ -73,19 +76,22 @@ const useAuthStore = create<AuthState>((set) => ({
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error('Error signing in:', error);
-      if (error.code === 'auth/popup-closed-by-user') {
-        set({ error: 'ログインがキャンセルされました' });
-      } else if (error.code === 'auth/popup-blocked') {
-        set({ error: 'ポップアップがブロックされています。ブラウザの設定を確認してください' });
+      console.error("Error signing in:", error);
+      if (error.code === "auth/popup-closed-by-user") {
+        set({ error: "ログインがキャンセルされました" });
+      } else if (error.code === "auth/popup-blocked") {
+        set({
+          error:
+            "ポップアップがブロックされています。ブラウザの設定を確認してください",
+        });
       } else {
-        set({ error: 'ログインに失敗しました。もう一度お試しください' });
+        set({ error: "ログインに失敗しました。もう一度お試しください" });
       }
     } finally {
       set({ loading: false });
     }
   },
-  clearError: () => set({ error: null })
+  clearError: () => set({ error: null }),
 }));
 
 export const useAuth = () => {
@@ -107,4 +113,4 @@ export const useAuth = () => {
 };
 
 // getStateメソッドを追加
-useAuth.getState = useAuthStore.getState; 
+useAuth.getState = useAuthStore.getState;

@@ -26,6 +26,7 @@ import {
   doc,
   deleteDoc,
   getDocs,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
@@ -66,69 +67,27 @@ export const FriendsList: React.FC = () => {
       return;
     }
 
-    // 自分が共有されている友達を取得
-    const sharedWithMeQuery = query(
-      collection(db, "shares"),
-      where("toUserId", "==", user.uid)
+    // 友達リストを取得
+    const friendsQuery = query(
+      collection(db, "friends"),
+      where("userId", "==", user.uid)
     );
 
-    // 自分が共有している友達を取得
-    const sharedByMeQuery = query(
-      collection(db, "shares"),
-      where("fromUserId", "==", user.uid)
-    );
-
-    const unsubscribe1 = onSnapshot(
-      sharedWithMeQuery,
+    const unsubscribe = onSnapshot(
+      friendsQuery,
       (snapshot) => {
         const friendList: Friend[] = [];
         snapshot.forEach((doc) => {
           const data = doc.data();
           friendList.push({
-            id: data.fromUserId,
-            email: data.fromUserEmail,
-            displayName: data.fromUserDisplayName,
-            photoURL: data.fromUserPhotoURL,
+            id: data.friendId,
+            email: data.friendEmail,
+            displayName: data.friendDisplayName,
+            photoURL: data.friendPhotoURL,
           });
         });
-        console.log("自分が共有されている友達:", friendList);
-        setFriends((prev) => {
-          // 既存の友達リストから自分が共有している友達を除外
-          const filteredPrev = prev.filter(
-            (f) => !friendList.some((newFriend) => newFriend.id === f.id)
-          );
-          return [...filteredPrev, ...friendList];
-        });
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error fetching friends:", err);
-        setError("友達の取得に失敗しました");
-        setLoading(false);
-      }
-    );
-
-    const unsubscribe2 = onSnapshot(
-      sharedByMeQuery,
-      (snapshot) => {
-        const friendList: Friend[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          friendList.push({
-            id: data.toUserId,
-            email: data.toUserEmail,
-            displayName: data.toUserDisplayName,
-            photoURL: data.toUserPhotoURL,
-          });
-        });
-        console.log("自分が共有している友達:", friendList);
-        setFriends((prev) => {
-          // 既存の友達リストから自分が共有されている友達を除外
-          const filteredPrev = prev.filter(
-            (f) => !friendList.some((newFriend) => newFriend.id === f.id)
-          );
-          return [...filteredPrev, ...friendList];
-        });
+        console.log("友達リスト:", friendList);
+        setFriends(friendList);
         setLoading(false);
       },
       (err) => {
@@ -139,8 +98,7 @@ export const FriendsList: React.FC = () => {
     );
 
     return () => {
-      unsubscribe1();
-      unsubscribe2();
+      unsubscribe();
     };
   }, [user]);
 
@@ -218,32 +176,37 @@ export const FriendsList: React.FC = () => {
 
     setDeleteLoading(true);
     try {
-      // 自分が共有されている友達の場合
-      const sharedWithMeQuery = query(
-        collection(db, "shares"),
-        where("fromUserId", "==", friendToDelete.id),
-        where("toUserId", "==", user.uid)
+      // 友達関係を相互に削除
+      const batch = writeBatch(db);
+
+      // 自分から相手への友達関係を削除
+      const myFriendQuery = query(
+        collection(db, "friends"),
+        where("userId", "==", user.uid),
+        where("friendId", "==", friendToDelete.id)
       );
 
-      // 自分が共有している友達の場合
-      const sharedByMeQuery = query(
-        collection(db, "shares"),
-        where("fromUserId", "==", user.uid),
-        where("toUserId", "==", friendToDelete.id)
+      // 相手から自分への友達関係を削除
+      const theirFriendQuery = query(
+        collection(db, "friends"),
+        where("userId", "==", friendToDelete.id),
+        where("friendId", "==", user.uid)
       );
 
-      const [sharedWithMeSnapshot, sharedByMeSnapshot] = await Promise.all([
-        getDocs(sharedWithMeQuery),
-        getDocs(sharedByMeQuery),
+      const [myFriendSnapshot, theirFriendSnapshot] = await Promise.all([
+        getDocs(myFriendQuery),
+        getDocs(theirFriendQuery),
       ]);
 
-      // 共有設定を削除
-      const deletePromises = [
-        ...sharedWithMeSnapshot.docs.map((doc: any) => deleteDoc(doc.ref)),
-        ...sharedByMeSnapshot.docs.map((doc: any) => deleteDoc(doc.ref)),
-      ];
+      // 友達関係を削除
+      myFriendSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      theirFriendSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
 
-      await Promise.all(deletePromises);
+      await batch.commit();
 
       // ローカルの友達リストから削除
       setFriends((prev) => prev.filter((f) => f.id !== friendToDelete.id));
@@ -306,7 +269,17 @@ export const FriendsList: React.FC = () => {
         ) : (
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {friends.map((friend) => (
-              <Paper key={friend.id} sx={{ p: 2 }}>
+              <Paper
+                key={friend.id}
+                sx={{
+                  p: 2,
+                  transition: "all 0.2s ease-in-out",
+                  "&:hover": {
+                    boxShadow: 3,
+                    transform: "translateY(-2px)",
+                  },
+                }}
+              >
                 <Box
                   sx={{
                     display: "flex",
@@ -316,20 +289,38 @@ export const FriendsList: React.FC = () => {
                   }}
                 >
                   <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <Avatar src={friend.photoURL || undefined}>
+                    <Avatar
+                      src={friend.photoURL || undefined}
+                      sx={{
+                        width: 48,
+                        height: 48,
+                        bgcolor: friend.photoURL
+                          ? "transparent"
+                          : "primary.main",
+                      }}
+                    >
                       {friend.displayName?.[0] || friend.email[0].toUpperCase()}
                     </Avatar>
                     <Box>
-                      <Typography variant="subtitle1">
+                      <Typography
+                        variant="subtitle1"
+                        sx={{ fontWeight: "bold" }}
+                      >
                         {friend.displayName || friend.email}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {friend.email}
                       </Typography>
                     </Box>
                   </Box>
                   <Box sx={{ display: "flex", gap: 1 }}>
-                    <IconButton onClick={() => handleExpandClick(friend.id)}>
+                    <IconButton
+                      onClick={() => handleExpandClick(friend.id)}
+                      sx={{
+                        transition: "transform 0.2s ease-in-out",
+                        transform:
+                          expandedFriend === friend.id
+                            ? "rotate(180deg)"
+                            : "none",
+                      }}
+                    >
                       {expandedFriend === friend.id ? (
                         <ExpandLessIcon />
                       ) : (
@@ -339,6 +330,12 @@ export const FriendsList: React.FC = () => {
                     <IconButton
                       color="error"
                       onClick={() => handleDeleteClick(friend)}
+                      sx={{
+                        "&:hover": {
+                          backgroundColor: "error.light",
+                          color: "white",
+                        },
+                      }}
                     >
                       <DeleteIcon />
                     </IconButton>
@@ -352,13 +349,16 @@ export const FriendsList: React.FC = () => {
                         display: "grid",
                         gridTemplateColumns: "repeat(2, 1fr)",
                         gap: 2,
+                        p: 2,
+                        bgcolor: "background.default",
+                        borderRadius: 1,
                       }}
                     >
                       <Box>
                         <Typography variant="body2" color="text.secondary">
                           総トレーニング回数
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="primary">
                           {friend.stats.totalWorkouts}回
                         </Typography>
                       </Box>
@@ -366,7 +366,7 @@ export const FriendsList: React.FC = () => {
                         <Typography variant="body2" color="text.secondary">
                           総セット数
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="primary">
                           {friend.stats.totalSets}セット
                         </Typography>
                       </Box>
@@ -374,7 +374,7 @@ export const FriendsList: React.FC = () => {
                         <Typography variant="body2" color="text.secondary">
                           総レップ数
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="primary">
                           {friend.stats.totalReps}回
                         </Typography>
                       </Box>
@@ -382,7 +382,7 @@ export const FriendsList: React.FC = () => {
                         <Typography variant="body2" color="text.secondary">
                           最高重量
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="primary">
                           {friend.stats.maxWeight}kg
                         </Typography>
                       </Box>
@@ -391,7 +391,7 @@ export const FriendsList: React.FC = () => {
                           <Typography variant="body2" color="text.secondary">
                             最終トレーニング
                           </Typography>
-                          <Typography variant="body1">
+                          <Typography variant="body1" color="primary">
                             {friend.stats.lastWorkoutDate.toLocaleDateString(
                               "ja-JP"
                             )}
