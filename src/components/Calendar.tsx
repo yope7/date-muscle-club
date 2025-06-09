@@ -35,7 +35,11 @@ import { WorkoutRecord } from "@/types/workout";
 import { Timestamp } from "firebase/firestore";
 import { WorkoutSets } from "./WorkoutSets";
 
-export const Calendar = () => {
+interface CalendarProps {
+  isDrawerOpen?: boolean;
+}
+
+export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const theme = useTheme();
   const { selectedDate, setSelectedDate, workouts } = useWorkoutStore();
   const { user } = useAuth();
@@ -197,18 +201,18 @@ export const Calendar = () => {
           return (
             <Box key={index}>
               <Box
-                onClick={() => handleDateClick(date)}
+                onClick={() => !isDrawerOpen && handleDateClick(date)}
                 sx={{
                   aspectRatio: "1",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  cursor: "pointer",
+                  cursor: isDrawerOpen ? "default" : "pointer",
                   position: "relative",
                   bgcolor: isCurrentDay ? "action.selected" : "transparent",
                   opacity: isCurrentMonth ? 1 : 0.5,
                   "&:hover": {
-                    bgcolor: "action.hover",
+                    bgcolor: isDrawerOpen ? "transparent" : "action.hover",
                   },
                 }}
               >

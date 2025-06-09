@@ -25,31 +25,19 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { useDrawerStore } from "@/store/drawerStore";
 
 interface ClientLayoutProps {
   children: React.ReactNode;
 }
 
 export const ClientLayout = ({ children }: ClientLayoutProps) => {
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const { user, signOut } = useAuth();
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const { isDrawerOpen, setDrawerOpen } = useDrawerStore();
 
-  const toggleDrawer =
-    (open: boolean) => (event: React.KeyboardEvent | React.MouseEvent) => {
-      if (
-        event &&
-        event.type === "keydown" &&
-        ((event as React.KeyboardEvent).key === "Tab" ||
-          (event as React.KeyboardEvent).key === "Shift")
-      ) {
-        return;
-      }
-      setDrawerOpen(open);
-    };
-
-  const handleSignOut = () => {
-    signOut();
+  const handleSignOut = async () => {
+    await signOut();
     setDrawerOpen(false);
   };
 
@@ -59,15 +47,13 @@ export const ClientLayout = ({ children }: ClientLayoutProps) => {
       <div role="main">{children}</div>
       <SwipeableDrawer
         anchor="left"
-        open={drawerOpen}
-        onClose={toggleDrawer(false)}
-        onOpen={toggleDrawer(true)}
-        disableDiscovery={false}
-        disableSwipeToOpen={false}
-        swipeAreaWidth={100}
+        open={isDrawerOpen}
+        onOpen={() => setDrawerOpen(true)}
+        onClose={() => setDrawerOpen(false)}
         sx={{
           "& .MuiDrawer-paper": {
-            width: 250,
+            width: 280,
+            zIndex: 1200,
           },
         }}
       >

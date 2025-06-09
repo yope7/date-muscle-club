@@ -1,9 +1,27 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Box, Typography, Paper, CircularProgress, Alert, Button, Dialog, DialogContent, useTheme, useMediaQuery } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Paper,
+  CircularProgress,
+  Alert,
+  Button,
+  Dialog,
+  DialogContent,
+  useTheme,
+  useMediaQuery,
+} from "@mui/material";
 import { useAuth } from "@/hooks/useAuth";
-import { collection, query, orderBy, onSnapshot, doc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  doc,
+  deleteDoc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
 import { WorkoutSets } from "@/components/WorkoutSets";
@@ -13,10 +31,12 @@ import { useWorkoutStore } from "@/store/workoutStore";
 import { format, isSameDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Add as AddIcon } from "@mui/icons-material";
+import { useDrawerStore } from "@/store/drawerStore";
 
 export default function Home() {
   const { user } = useAuth();
   const { selectedDate, workouts } = useWorkoutStore();
+  const { isDrawerOpen } = useDrawerStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [localWorkouts, setLocalWorkouts] = useState<WorkoutRecord[]>([]);
@@ -30,7 +50,10 @@ export default function Home() {
       return;
     }
 
-    const q = query(collection(db, "users", user.uid, "workouts"), orderBy("date", "desc"));
+    const q = query(
+      collection(db, "users", user.uid, "workouts"),
+      orderBy("date", "desc")
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -107,18 +130,33 @@ export default function Home() {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: { xs: "column", md: "row" },
+          gap: 3,
+        }}
+      >
         <Box sx={{ flex: 1 }}>
-          <Calendar />
+          <Calendar isDrawerOpen={isDrawerOpen} />
         </Box>
         <Box sx={{ flex: 1 }}>
           <Paper sx={{ p: 2, mb: 2 }}>
             <Typography variant="h6" gutterBottom>
-              {selectedDate ? format(selectedDate, "yyyy年M月d日", { locale: ja }) : "日付を選択してください"}
+              {selectedDate
+                ? format(selectedDate, "yyyy年M月d日", { locale: ja })
+                : "日付を選択してください"}
             </Typography>
             {selectedDate && (
               <Box sx={{ mt: 2, mb: 2 }}>
-                <Button variant="contained" color="primary" fullWidth startIcon={<AddIcon />} onClick={() => setIsFormOpen(true)} aria-label="セットを追加">
+                <Button
+                  variant="contained"
+                  color="primary"
+                  fullWidth
+                  startIcon={<AddIcon />}
+                  onClick={() => setIsFormOpen(true)}
+                  aria-label="セットを追加"
+                >
                   セットを追加
                 </Button>
               </Box>
