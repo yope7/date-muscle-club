@@ -59,7 +59,7 @@ import Link from "next/link";
 import { useUserStore } from "@/store/userStore";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { MyPage } from "@/components/MyPage";
-import SwipeableViews from "react-swipeable-views";
+import { useSwipeable } from "react-swipeable";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -168,9 +168,20 @@ export default function Home() {
     setValue(newValue);
   };
 
-  const handleChangeIndex = (index: number) => {
-    setValue(index);
-  };
+  const handlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (value < 2) {
+        setValue(value + 1);
+      }
+    },
+    onSwipedRight: () => {
+      if (value > 0) {
+        setValue(value - 1);
+      }
+    },
+    preventScrollOnSwipe: true,
+    trackMouse: true,
+  });
 
   if (!user) {
     return (
@@ -226,15 +237,7 @@ export default function Home() {
           <Tab label="マイページ" />
         </Tabs>
       </Box>
-      <SwipeableViews
-        axis={theme.direction === "rtl" ? "x-reverse" : "x"}
-        index={value}
-        onChangeIndex={handleChangeIndex}
-        enableMouseEvents
-        resistance
-        hysteresis={0.3}
-        // style={{ touchAction: "pan-y" }}
-      >
+      <Box {...handlers}>
         <TabPanel value={value} index={0}>
           <Calendar isDrawerOpen={isDrawerOpen} />
         </TabPanel>
@@ -251,7 +254,7 @@ export default function Home() {
         <TabPanel value={value} index={2}>
           <MyPage />
         </TabPanel>
-      </SwipeableViews>
+      </Box>
 
       <Dialog
         fullScreen={isMobile}
