@@ -12,6 +12,8 @@ import {
   DialogContent,
   useTheme,
   useMediaQuery,
+  Tabs,
+  Tab,
 } from "@mui/material";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -32,6 +34,7 @@ import { format, isSameDay } from "date-fns";
 import { ja } from "date-fns/locale";
 import { Add as AddIcon } from "@mui/icons-material";
 import { useDrawerStore } from "@/store/drawerStore";
+import { Feed } from "@/components/Feed";
 
 export default function Home() {
   const { user } = useAuth();
@@ -41,6 +44,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [localWorkouts, setLocalWorkouts] = useState<WorkoutRecord[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -129,46 +133,86 @@ export default function Home() {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box
+    <Box sx={{ p: 2 }}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Tabs
+        value={activeTab}
+        onChange={(_, newValue) => setActiveTab(newValue)}
         sx={{
-          display: "flex",
-          flexDirection: { xs: "column", md: "row" },
-          gap: 3,
+          mb: 2,
+          "& .MuiTab-root": {
+            fontSize: "1rem",
+            fontWeight: "bold",
+            minHeight: 48,
+          },
+          "& .Mui-selected": {
+            color: "primary.main",
+          },
         }}
+        variant="fullWidth"
       >
-        <Box sx={{ flex: 1 }}>
-          <Calendar isDrawerOpen={isDrawerOpen} />
+        <Tab label="カレンダー" />
+        <Tab label="フィード" />
+      </Tabs>
+
+      {activeTab === 0 ? (
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            gap: 3,
+          }}
+        >
+          <Box sx={{ flex: 1 }}>
+            <Calendar isDrawerOpen={isDrawerOpen} />
+          </Box>
+          <Box sx={{ flex: 1 }}>
+            <Paper sx={{ p: 2, mb: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                {selectedDate
+                  ? format(selectedDate, "yyyy年M月d日", { locale: ja })
+                  : "日付を選択してください"}
+              </Typography>
+              {selectedDate && (
+                <Box sx={{ mt: 2, mb: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    fullWidth
+                    startIcon={<AddIcon />}
+                    onClick={() => setIsFormOpen(true)}
+                    aria-label="セットを追加"
+                  >
+                    セットを追加
+                  </Button>
+                </Box>
+              )}
+              {selectedWorkout ? (
+                <WorkoutSets
+                  workout={selectedWorkout}
+                  onDelete={handleDelete}
+                />
+              ) : (
+                <Typography color="text.secondary">記録はありません</Typography>
+              )}
+            </Paper>
+          </Box>
         </Box>
-        <Box sx={{ flex: 1 }}>
-          <Paper sx={{ p: 2, mb: 2 }}>
+      ) : (
+        <Box>
+          <Paper sx={{ p: 2 }}>
             <Typography variant="h6" gutterBottom>
-              {selectedDate
-                ? format(selectedDate, "yyyy年M月d日", { locale: ja })
-                : "日付を選択してください"}
+              フィード
             </Typography>
-            {selectedDate && (
-              <Box sx={{ mt: 2, mb: 2 }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  startIcon={<AddIcon />}
-                  onClick={() => setIsFormOpen(true)}
-                  aria-label="セットを追加"
-                >
-                  セットを追加
-                </Button>
-              </Box>
-            )}
-            {selectedWorkout ? (
-              <WorkoutSets workout={selectedWorkout} onDelete={handleDelete} />
-            ) : (
-              <Typography color="text.secondary">記録はありません</Typography>
-            )}
+            <Feed workouts={localWorkouts} />
           </Paper>
         </Box>
-      </Box>
+      )}
 
       <Dialog
         fullScreen={isMobile}
