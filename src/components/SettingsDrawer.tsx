@@ -177,16 +177,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <ListItemText primary="友達を招待" />
           </ListItemButton>
           <Divider />
-          <Typography variant="overline" sx={{ px: 2, py: 1 }}>
-            データ管理
-          </Typography>
-          <ListItemButton onClick={handleResetOpen}>
-            <ListItemIcon>
-              <DeleteIcon />
-            </ListItemIcon>
-            <ListItemText primary="データをリセット" />
-          </ListItemButton>
-          <Divider />
+
           <Typography variant="overline" sx={{ px: 2, py: 1 }}>
             その他
           </Typography>
@@ -201,6 +192,16 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
               <InfoIcon />
             </ListItemIcon>
             <ListItemText primary="アプリについて" />
+          </ListItemButton>
+          <Divider />
+          <Typography variant="overline" sx={{ px: 2, py: 1 }}>
+            データ管理
+          </Typography>
+          <ListItemButton onClick={handleResetOpen}>
+            <ListItemIcon>
+              <DeleteIcon sx={{ color: "red" }} />
+            </ListItemIcon>
+            <ListItemText primary="データをリセット" sx={{ color: "red" }} />
           </ListItemButton>
         </List>
       </Drawer>

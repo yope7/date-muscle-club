@@ -68,15 +68,13 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
             </IconButton>
             {user ? (
               <>
-                <Link href="/mypage" style={{ color: "inherit" }}>
-                  <IconButton color="inherit" aria-label="マイページ">
-                    <Avatar
-                      src={user.photoURL || undefined}
-                      alt={user.displayName || user.email || "ユーザー"}
-                      sx={{ width: 32, height: 32 }}
-                    />
-                  </IconButton>
-                </Link>
+                <IconButton color="inherit" aria-label="マイページ">
+                  <Avatar
+                    src={user.photoURL || undefined}
+                    alt={user.displayName || user.email || "ユーザー"}
+                    sx={{ width: 32, height: 32 }}
+                  />
+                </IconButton>
                 <IconButton
                   color="inherit"
                   onClick={signOut}
