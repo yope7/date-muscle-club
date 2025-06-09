@@ -93,6 +93,13 @@ export const Calendar = () => {
     return () => unsubscribe();
   }, [user, currentMonth]);
 
+  useEffect(() => {
+    if (!loading) {
+      const today = new Date();
+      handleDateClick(today);
+    }
+  }, [loading]);
+
   const days = ["日", "月", "火", "水", "木", "金", "土"];
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
