@@ -220,7 +220,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   }
 
   return (
-    <Box sx={{ width: "100%" }}>
+    <Box
+      sx={{ width: "100%", maxWidth: { xs: "100%", sm: "600px" }, mx: "auto" }}
+    >
       <Box
         sx={{
           display: "flex",
@@ -241,10 +243,14 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       </Box>
 
       <Box
-        sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 1 }}
+        sx={{
+          display: "grid",
+          gridTemplateColumns: "repeat(7, 1fr)",
+          gap: { xs: 1, sm: 2 },
+        }}
       >
         {days.map((day) => (
-          <Box key={day} sx={{ textAlign: "center", py: 1 }}>
+          <Box key={day} sx={{ textAlign: "center", py: { xs: 1, sm: 1.5 } }}>
             <Typography variant="body2" color="text.secondary">
               {day}
             </Typography>
@@ -260,76 +266,82 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
             format(selectedDate, "yyyy-MM-dd") === format(date, "yyyy-MM-dd");
 
           return (
-            <Box key={index}>
-              <Box
-                onClick={() => !isDrawerOpen && handleDateClick(date)}
-                sx={{
-                  aspectRatio: "1",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: isDrawerOpen ? "default" : "pointer",
-                  position: "relative",
-                  bgcolor: isSelected
-                    ? "action.selected"
+            <Box
+              key={index}
+              onClick={() => !isDrawerOpen && handleDateClick(date)}
+              sx={{
+                position: "relative",
+                aspectRatio: "1",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: isDrawerOpen ? "default" : "pointer",
+                bgcolor: isSelected
+                  ? "action.selected"
+                  : isCurrentDay
+                  ? "action.hover"
+                  : "transparent",
+                borderRadius: 1,
+                "&:hover": {
+                  bgcolor: isDrawerOpen ? "transparent" : "action.hover",
+                },
+              }}
+            >
+              <Typography
+                variant="body2"
+                color={
+                  isSelected
+                    ? "primary.main"
                     : isCurrentDay
-                    ? "action.hover"
-                    : "transparent",
-                  opacity: isCurrentMonth ? 1 : 0.5,
-                  "&:hover": {
-                    bgcolor: isDrawerOpen ? "transparent" : "action.hover",
-                  },
+                    ? "primary.main"
+                    : "text.primary"
+                }
+                sx={{
+                  fontSize: { xs: "0.875rem", sm: "1rem" },
+                  fontWeight: isSelected || isCurrentDay ? "bold" : "normal",
                 }}
               >
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: isSelected
-                      ? "primary.main"
-                      : isCurrentDay
-                      ? "primary.main"
-                      : "text.primary",
-                    fontWeight: isSelected || isCurrentDay ? "bold" : "normal",
-                  }}
-                >
-                  {format(date, "d")}
-                </Typography>
+                {format(date, "d")}
+              </Typography>
 
-                {calendarDisplayMode === "color" ? (
-                  <Box
+              {calendarDisplayMode === "color" ? (
+                <Box
+                  sx={{
+                    position: "absolute",
+                    bottom: { xs: 2, sm: 4 },
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: { xs: "60%", sm: "70%" },
+                    height: { xs: 3, sm: 4 },
+                    bgcolor: getDayColor(reps),
+                    borderRadius: 1,
+                  }}
+                />
+              ) : (
+                reps > 0 && (
+                  <WhatshotIcon
                     sx={{
                       position: "absolute",
-                      bottom: 2,
+                      bottom: { xs: 2, sm: 4 },
                       left: "50%",
                       transform: "translateX(-50%)",
-                      width: "80%",
-                      height: 4,
-                      bgcolor: getDayColor(reps),
-                      borderRadius: 1,
+                      color: theme.palette.warning.main,
+                      fontSize: {
+                        xs: `${getFireSize(reps)}rem`,
+                        sm: `${getFireSize(reps) * 1.2}rem`,
+                      },
                     }}
                   />
-                ) : (
-                  reps > 0 && (
-                    <WhatshotIcon
-                      sx={{
-                        position: "absolute",
-                        bottom: 2,
-                        left: "50%",
-                        transform: "translateX(-50%)",
-                        color: theme.palette.warning.main,
-                        fontSize: `${getFireSize(reps)}rem`,
-                      }}
-                    />
-                  )
-                )}
-              </Box>
+                )
+              )}
             </Box>
           );
         })}
       </Box>
 
       {selectedWorkout && (
-        <Box sx={{ mt: 2 }}>
+        <Box sx={{ mt: { xs: 2, sm: 3 } }}>
           <WorkoutSets
             workout={selectedWorkout}
             onDelete={async (workout) => {
@@ -347,47 +359,32 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>セットを追加</DialogTitle>
+        <DialogTitle>新しいセットを追加</DialogTitle>
         <DialogContent>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <Box sx={{ display: "flex", gap: 2 }}>
-              <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  重量
-                </Typography>
-                <WeightPicker
-                  value={newSet.weight}
-                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
-                />
-              </Box>
-              <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="subtitle2"
-                  color="text.secondary"
-                  gutterBottom
-                >
-                  回数
-                </Typography>
-                <RepsPicker
-                  value={newSet.reps}
-                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
-                />
-              </Box>
+          <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                重量
+              </Typography>
+              <WeightPicker
+                value={newSet.weight}
+                onChange={(value) => setNewSet({ ...newSet, weight: value })}
+              />
             </Box>
-          </Stack>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                回数
+              </Typography>
+              <RepsPicker
+                value={newSet.reps}
+                onChange={(value) => setNewSet({ ...newSet, reps: value })}
+              />
+            </Box>
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddSetDialogOpen(false)}>閉じる</Button>
-          <Button
-            onClick={handleAddSet}
-            variant="contained"
-            color="primary"
-            disabled={newSet.reps === 0}
-          >
+          <Button onClick={() => setAddSetDialogOpen(false)}>キャンセル</Button>
+          <Button onClick={handleAddSet} variant="contained">
             追加
           </Button>
         </DialogActions>
@@ -397,12 +394,11 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         open={snackbarOpen}
         autoHideDuration={3000}
         onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
         <Alert
           onClose={handleCloseSnackbar}
           severity="success"
-          variant="filled"
           sx={{ width: "100%" }}
         >
           セットを追加しました

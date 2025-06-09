@@ -58,6 +58,41 @@ export const RepsPicker = ({
     setIsDragging(false);
   };
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setStartY(e.clientY);
+    setStartValue(value);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+
+    const deltaY = startY - e.clientY;
+    const deltaValue = Math.round(deltaY / 10);
+    const newValue = Math.max(min, Math.min(max, startValue + deltaValue));
+    onChange(newValue);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const newValue = Math.min(max, value + 1);
+      onChange(newValue);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const newValue = Math.max(min, value - 1);
+      onChange(newValue);
+    }
+  };
+
+  const handleClick = (rep: number) => {
+    onChange(rep);
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -107,6 +142,12 @@ export const RepsPicker = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
     >
       <Box
         sx={{
@@ -122,6 +163,7 @@ export const RepsPicker = ({
           <Typography
             key={rep}
             variant={isMobile ? "h6" : "h5"}
+            onClick={() => handleClick(rep)}
             sx={{
               my: 0.5,
               opacity: rep === value ? 1 : 0.3,
@@ -129,6 +171,10 @@ export const RepsPicker = ({
               transition: "all 0.2s ease",
               fontWeight: rep === value ? "bold" : "normal",
               color: rep === value ? theme.palette.primary.main : "inherit",
+              cursor: "pointer",
+              "&:hover": {
+                opacity: 0.8,
+              },
             }}
           >
             {rep} 回

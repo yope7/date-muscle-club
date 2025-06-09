@@ -65,6 +65,43 @@ export const WeightPicker = ({
     setIsDragging(false);
   };
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setStartY(e.clientY);
+    setStartValue(value);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+
+    const deltaY = startY - e.clientY;
+    const deltaValue = Math.round(deltaY / 10);
+    const rawValue = Math.max(0, startValue + deltaValue);
+    // 2.5kg刻みの最も近い値にスナップ
+    const snappedValue = Math.round(rawValue / step) * step;
+    onChange(snappedValue);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const newValue = Math.min(max, value + step);
+      onChange(newValue);
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const newValue = Math.max(min, value - step);
+      onChange(newValue);
+    }
+  };
+
+  const handleClick = (weight: number) => {
+    onChange(weight);
+  };
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -72,7 +109,7 @@ export const WeightPicker = ({
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const delta = Math.sign(e.deltaY) * -1;
-      const rawValue = Math.max(0, value + delta);
+      const rawValue = Math.max(0, value + delta * step);
       // 2.5kg刻みの最も近い値にスナップ
       const snappedValue = Math.round(rawValue / step) * step;
       onChange(snappedValue);
@@ -116,6 +153,12 @@ export const WeightPicker = ({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
     >
       <Box
         sx={{
@@ -131,6 +174,7 @@ export const WeightPicker = ({
           <Typography
             key={weight}
             variant={isMobile ? "h6" : "h5"}
+            onClick={() => handleClick(weight)}
             sx={{
               my: 0.5,
               opacity: weight === value ? 1 : 0.3,
@@ -138,6 +182,10 @@ export const WeightPicker = ({
               transition: "all 0.2s ease",
               fontWeight: weight === value ? "bold" : "normal",
               color: weight === value ? theme.palette.primary.main : "inherit",
+              cursor: "pointer",
+              "&:hover": {
+                opacity: 0.8,
+              },
             }}
           >
             {weight} kg
