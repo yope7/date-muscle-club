@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { useAuth } from './AuthProvider';
-import { WorkoutRecord } from '@/types/workout';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { useAuth } from "./AuthProvider";
+import { WorkoutRecord } from "@/types/workout";
 
 interface WorkoutStoreContextType {
   selectedDate: Date | null;
@@ -22,7 +22,11 @@ const WorkoutStoreContext = createContext<WorkoutStoreContextType>({
 
 export const useWorkoutStore = () => useContext(WorkoutStoreContext);
 
-export const WorkoutStoreProvider = ({ children }: { children: React.ReactNode }) => {
+export const WorkoutStoreProvider = ({
+  children,
+}: {
+  children: React.ReactNode;
+}) => {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [workouts, setWorkouts] = useState<WorkoutRecord[]>([]);
   const { user } = useAuth();
@@ -34,12 +38,12 @@ export const WorkoutStoreProvider = ({ children }: { children: React.ReactNode }
     }
 
     const q = query(
-      collection(db, 'workouts'),
-      where('userId', '==', user.uid)
+      collection(db, "workouts"),
+      where("userId", "==", user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const workoutData = snapshot.docs.map(doc => {
+      const workoutData = snapshot.docs.map((doc) => {
         const data = doc.data();
         return {
           ...doc.data(),
@@ -72,4 +76,4 @@ export const WorkoutStoreProvider = ({ children }: { children: React.ReactNode }
       {children}
     </WorkoutStoreContext.Provider>
   );
-}; 
+};
