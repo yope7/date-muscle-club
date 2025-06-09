@@ -57,10 +57,12 @@ import {
   Logout as LogoutIcon,
 } from "@mui/icons-material";
 import Link from "next/link";
+import { useUserStore } from "@/store/userStore";
+import { SettingsDrawer } from "@/components/SettingsDrawer";
 
 export default function Home() {
   const { user, signOut } = useAuth();
-  const { selectedDate, workouts } = useWorkoutStore();
+  const { workouts, fetchWorkouts, selectedDate } = useWorkoutStore();
   const { isDrawerOpen } = useDrawerStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,22 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  const { profile, fetchProfile, friends } = useUserStore();
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile(user.uid);
+      fetchWorkouts(user.uid);
+    }
+  }, [user, fetchProfile, fetchWorkouts]);
+
+  useEffect(() => {
+    console.log("友人の情報:", {
+      friends,
+      profile,
+      user,
+    });
+  }, [friends, profile, user]);
 
   useEffect(() => {
     if (!user) {
@@ -194,38 +212,12 @@ export default function Home() {
   return (
     <Box
       sx={{
-        p: 2,
-        position: "relative",
+        display: "flex",
+        flexDirection: "column",
         minHeight: "100vh",
-        overflow: "hidden",
+        bgcolor: "background.default",
       }}
     >
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <Tabs
-        value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
-        sx={{
-          mb: 2,
-          "& .MuiTab-root": {
-            fontSize: "1rem",
-            fontWeight: "bold",
-            minHeight: 48,
-          },
-          "& .Mui-selected": {
-            color: "primary.main",
-          },
-        }}
-        variant="fullWidth"
-      >
-        <Tab label="カレンダー" />
-        <Tab label="フィード" />
-      </Tabs>
-
       <Box
         {...handlers}
         sx={{
@@ -235,172 +227,32 @@ export default function Home() {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        <Slide
-          direction="right"
-          in={activeTab === 0}
-          mountOnEnter
-          unmountOnExit
+        <Tabs
+          value={activeTab}
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          variant="fullWidth"
+          sx={{
+            position: "sticky",
+            top: 0,
+            zIndex: 1,
+            bgcolor: "background.paper",
+            borderBottom: 1,
+            borderColor: "divider",
+          }}
         >
-          <Box
-            role="tabpanel"
-            sx={{
-              display: "flex",
-              flexDirection: { xs: "column", md: "row" },
-              gap: 3,
-              position: "absolute",
-              width: "100%",
-              left: 0,
-              right: 0,
-            }}
-          >
-            <Box sx={{ flex: 1 }}>
-              <Calendar isDrawerOpen={isDrawerOpen} />
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <Paper sx={{ p: 2, mb: 2 }}>
-                <Typography variant="h6" gutterBottom>
-                  {selectedDate
-                    ? format(selectedDate, "yyyy年M月d日", { locale: ja })
-                    : "日付を選択してください"}
-                </Typography>
-                {selectedDate && (
-                  <Box sx={{ mt: 2, mb: 2 }}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      fullWidth
-                      startIcon={<AddIcon />}
-                      onClick={() => setIsFormOpen(true)}
-                      aria-label="セットを追加"
-                    >
-                      セットを追加
-                    </Button>
-                  </Box>
-                )}
-                {selectedWorkout ? (
-                  <WorkoutSets
-                    workout={selectedWorkout}
-                    onDelete={handleDelete}
-                  />
-                ) : (
-                  <Typography color="text.secondary">
-                    記録はありません
-                  </Typography>
-                )}
-              </Paper>
-            </Box>
-          </Box>
-        </Slide>
+          <Tab label="カレンダー" />
+          <Tab label="フィード" />
+        </Tabs>
 
-        <Slide direction="left" in={activeTab === 1} mountOnEnter unmountOnExit>
-          <Box
-            role="tabpanel"
-            sx={{
-              position: "absolute",
-              width: "100%",
-              left: 0,
-              right: 0,
-            }}
-          >
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                フィード
-              </Typography>
-              <Feed workouts={localWorkouts} />
-            </Paper>
-          </Box>
-        </Slide>
+        <Box sx={{ p: 2 }}>
+          {activeTab === 0 ? <Calendar /> : <Feed workouts={workouts} />}
+        </Box>
       </Box>
 
-      <SwipeableDrawer
-        anchor="left"
+      <SettingsDrawer
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        onOpen={() => setIsSettingsOpen(true)}
-        sx={{
-          "& .MuiDrawer-paper": {
-            width: 280,
-            zIndex: 1200,
-          },
-        }}
-      >
-        <List>
-          {user && (
-            <>
-              <Link
-                href="/mypage"
-                style={{ textDecoration: "none", color: "inherit" }}
-              >
-                <ListItemButton onClick={() => setIsSettingsOpen(false)}>
-                  <ListItemIcon>
-                    <PersonIcon />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={user.displayName || user.email}
-                    secondary="ログイン中"
-                  />
-                </ListItemButton>
-              </Link>
-              <Divider />
-              <Typography variant="overline" sx={{ px: 2, py: 1 }}>
-                設定
-              </Typography>
-              <ListItemButton
-                onClick={() => {
-                  setIsSettingsOpen(false);
-                  setIsFormOpen(true);
-                }}
-              >
-                <ListItemIcon>
-                  <SettingsIcon />
-                </ListItemIcon>
-                <ListItemText primary="表示設定" />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemIcon>
-                  <NotificationsIcon />
-                </ListItemIcon>
-                <ListItemText primary="通知設定" />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemIcon>
-                  <PaletteIcon />
-                </ListItemIcon>
-                <ListItemText primary="テーマ設定" />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemIcon>
-                  <LanguageIcon />
-                </ListItemIcon>
-                <ListItemText primary="言語設定" />
-              </ListItemButton>
-              <Divider />
-              <Typography variant="overline" sx={{ px: 2, py: 1 }}>
-                その他
-              </Typography>
-              <ListItemButton>
-                <ListItemIcon>
-                  <HelpIcon />
-                </ListItemIcon>
-                <ListItemText primary="ヘルプ" />
-              </ListItemButton>
-              <ListItemButton>
-                <ListItemIcon>
-                  <InfoIcon />
-                </ListItemIcon>
-                <ListItemText primary="アプリについて" />
-              </ListItemButton>
-              <Divider />
-              <ListItemButton onClick={signOut}>
-                <ListItemIcon>
-                  <LogoutIcon />
-                </ListItemIcon>
-                <ListItemText primary="ログアウト" />
-              </ListItemButton>
-            </>
-          )}
-        </List>
-      </SwipeableDrawer>
+      />
 
       <Dialog
         fullScreen={isMobile}

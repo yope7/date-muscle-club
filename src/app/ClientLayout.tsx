@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import {
   SwipeableDrawer,
@@ -26,6 +26,8 @@ import { useAuth } from "@/hooks/useAuth";
 import Link from "next/link";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useDrawerStore } from "@/store/drawerStore";
+import { useUserStore } from "@/store/userStore";
+import { ProfileDialog } from "@/components/ProfileDialog";
 
 interface ClientLayoutProps {
   children: React.ReactNode;
@@ -34,7 +36,21 @@ interface ClientLayoutProps {
 export const ClientLayout = ({ children }: ClientLayoutProps) => {
   const { user, signOut } = useAuth();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false);
   const { isDrawerOpen, setDrawerOpen } = useDrawerStore();
+  const { profile, fetchProfile } = useUserStore();
+
+  useEffect(() => {
+    if (user) {
+      fetchProfile(user.uid);
+    }
+  }, [user, fetchProfile]);
+
+  useEffect(() => {
+    if (user && profile === null) {
+      setIsProfileDialogOpen(true);
+    }
+  }, [user, profile]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -69,7 +85,9 @@ export const ClientLayout = ({ children }: ClientLayoutProps) => {
                     <PersonIcon />
                   </ListItemIcon>
                   <ListItemText
-                    primary={user.displayName || user.email}
+                    primary={
+                      profile?.username || user.displayName || user.email
+                    }
                     secondary="ログイン中"
                   />
                 </ListItemButton>
@@ -137,6 +155,11 @@ export const ClientLayout = ({ children }: ClientLayoutProps) => {
       <SettingsDialog
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+      <ProfileDialog
+        open={isProfileDialogOpen}
+        onClose={() => setIsProfileDialogOpen(false)}
+        isInitialSetup={profile === null}
       />
     </>
   );

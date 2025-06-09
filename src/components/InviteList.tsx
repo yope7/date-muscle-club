@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -11,9 +11,9 @@ import {
   Paper,
   CircularProgress,
   Alert,
-  Snackbar
-} from '@mui/material';
-import { useAuth } from '@/hooks/useAuth';
+  Snackbar,
+} from "@mui/material";
+import { useAuth } from "@/hooks/useAuth";
 import {
   collection,
   query,
@@ -23,16 +23,16 @@ import {
   updateDoc,
   serverTimestamp,
   addDoc,
-  getDoc
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+  getDoc,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface Invite {
   id: string;
   fromUserId: string;
   fromUserEmail: string;
   toEmail: string;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: "pending" | "accepted" | "rejected";
   createdAt: Date;
   updatedAt: Date;
 }
@@ -48,32 +48,36 @@ export const InviteList: React.FC = () => {
     if (!user?.email) return;
 
     const q = query(
-      collection(db, 'invites'),
-      where('toEmail', '==', user.email),
-      where('status', '==', 'pending')
+      collection(db, "invites"),
+      where("toEmail", "==", user.email),
+      where("status", "==", "pending")
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const inviteList: Invite[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        inviteList.push({
-          id: doc.id,
-          fromUserId: data.fromUserId,
-          fromUserEmail: data.fromUserEmail,
-          toEmail: data.toEmail,
-          status: data.status,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          updatedAt: data.updatedAt?.toDate() || new Date()
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const inviteList: Invite[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          inviteList.push({
+            id: doc.id,
+            fromUserId: data.fromUserId,
+            fromUserEmail: data.fromUserEmail,
+            toEmail: data.toEmail,
+            status: data.status,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+          });
         });
-      });
-      setInvites(inviteList);
-      setLoading(false);
-    }, (err) => {
-      console.error('Error fetching invites:', err);
-      setError('招待の取得に失敗しました');
-      setLoading(false);
-    });
+        setInvites(inviteList);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Error fetching invites:", err);
+        setError("招待の取得に失敗しました");
+        setLoading(false);
+      }
+    );
 
     return () => unsubscribe();
   }, [user?.email]);
@@ -82,51 +86,57 @@ export const InviteList: React.FC = () => {
     if (!user) return;
 
     try {
-      const inviteRef = doc(db, 'invites', inviteId);
+      const inviteRef = doc(db, "invites", inviteId);
       const inviteDoc = await getDoc(inviteRef);
-      
+
       if (!inviteDoc.exists()) {
-        throw new Error('招待が見つかりません');
+        throw new Error("招待が見つかりません");
       }
 
       const inviteData = inviteDoc.data();
       await updateDoc(inviteRef, {
-        status: accept ? 'accepted' : 'rejected',
-        updatedAt: serverTimestamp()
+        status: accept ? "accepted" : "rejected",
+        updatedAt: serverTimestamp(),
       });
 
       if (accept) {
         // 共有設定を追加
-        await addDoc(collection(db, 'shares'), {
+        await addDoc(collection(db, "shares"), {
           fromUserId: inviteData.fromUserId,
           toUserId: user.uid,
           fromUserEmail: inviteData.fromUserEmail,
           toUserEmail: user.email,
+          fromUserDisplayName: user.displayName,
+          fromUserPhotoURL: user.photoURL,
+          toUserDisplayName: user.displayName,
+          toUserPhotoURL: user.photoURL,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
         });
 
-        setSuccess('招待を承認しました');
+        setSuccess("招待を承認しました");
       } else {
-        setSuccess('招待を拒否しました');
+        setSuccess("招待を拒否しました");
       }
 
       // 招待リストから該当の招待を削除
-      setInvites(prevInvites => prevInvites.filter(invite => invite.id !== inviteId));
+      setInvites((prevInvites) =>
+        prevInvites.filter((invite) => invite.id !== inviteId)
+      );
 
       // 3秒後にメッセージを消す
       setTimeout(() => {
         setSuccess(null);
       }, 3000);
     } catch (err) {
-      console.error('Error handling invite:', err);
-      setError('招待の処理に失敗しました');
+      console.error("Error handling invite:", err);
+      setError("招待の処理に失敗しました");
     }
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
         <CircularProgress />
       </Box>
     );
@@ -180,7 +190,9 @@ export const InviteList: React.FC = () => {
               </ListItemAvatar>
               <ListItemText
                 primary={`${invite.fromUserEmail}からの招待`}
-                secondary={`送信日時: ${invite.createdAt.toLocaleString('ja-JP')}`}
+                secondary={`送信日時: ${invite.createdAt.toLocaleString(
+                  "ja-JP"
+                )}`}
               />
             </ListItem>
           ))}
@@ -195,4 +207,4 @@ export const InviteList: React.FC = () => {
       />
     </>
   );
-}; 
+};
