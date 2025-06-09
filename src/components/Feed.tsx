@@ -36,16 +36,31 @@ export const Feed = ({ workouts }: FeedProps) => {
               locale: ja,
             })}
             secondary={
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  合計:{" "}
-                  {workout.sets?.reduce((sum, set) => sum + (set.reps || 0), 0)}
-                  回
-                </Typography>
-                {workout.memo && (
-                  <Typography variant="body2" color="text.secondary">
-                    {workout.memo}
+              <Box component="div">
+                <Box component="div">
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    color="text.secondary"
+                  >
+                    合計:{" "}
+                    {workout.sets?.reduce(
+                      (sum, set) => sum + (set.reps || 0),
+                      0
+                    )}
+                    回
                   </Typography>
+                </Box>
+                {workout.memo && (
+                  <Box component="div">
+                    <Typography
+                      component="span"
+                      variant="body2"
+                      color="text.secondary"
+                    >
+                      {workout.memo}
+                    </Typography>
+                  </Box>
                 )}
               </Box>
             }

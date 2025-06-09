@@ -14,6 +14,15 @@ import {
   useMediaQuery,
   Tabs,
   Tab,
+  Slide,
+  SwipeableDrawer,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  ListItemButton,
+  IconButton,
 } from "@mui/material";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -35,9 +44,22 @@ import { ja } from "date-fns/locale";
 import { Add as AddIcon } from "@mui/icons-material";
 import { useDrawerStore } from "@/store/drawerStore";
 import { Feed } from "@/components/Feed";
+import { useSwipeable } from "react-swipeable";
+import {
+  Settings as SettingsIcon,
+  Notifications as NotificationsIcon,
+  Palette as PaletteIcon,
+  Language as LanguageIcon,
+  Help as HelpIcon,
+  Info as InfoIcon,
+  Close as CloseIcon,
+  Person as PersonIcon,
+  Logout as LogoutIcon,
+} from "@mui/icons-material";
+import Link from "next/link";
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const { selectedDate, workouts } = useWorkoutStore();
   const { isDrawerOpen } = useDrawerStore();
   const [loading, setLoading] = useState(true);
@@ -45,6 +67,7 @@ export default function Home() {
   const [localWorkouts, setLocalWorkouts] = useState<WorkoutRecord[]>([]);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
@@ -106,6 +129,42 @@ export default function Home() {
     }
   };
 
+  const handlers = useSwipeable({
+    onSwipedLeft: () => {
+      if (isSettingsOpen) {
+        setIsSettingsOpen(false);
+        return;
+      }
+      if (activeTab === 0) {
+        setActiveTab(1);
+      }
+    },
+    onSwipedRight: () => {
+      if (activeTab === 0 && !isSettingsOpen) {
+        setIsSettingsOpen(true);
+      } else if (activeTab === 1) {
+        setActiveTab(0);
+      }
+    },
+    preventScrollOnSwipe: true,
+    trackMouse: true,
+    delta: 10,
+    swipeDuration: 500,
+    touchEventOptions: { passive: false },
+  });
+
+  // 設定メニューの状態をグローバルに管理
+  useEffect(() => {
+    if (isSettingsOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [isSettingsOpen]);
+
   if (!user) {
     return (
       <Box sx={{ p: 3 }}>
@@ -133,7 +192,14 @@ export default function Home() {
   }
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box
+      sx={{
+        p: 2,
+        position: "relative",
+        minHeight: "100vh",
+        overflow: "hidden",
+      }}
+    >
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -160,59 +226,181 @@ export default function Home() {
         <Tab label="フィード" />
       </Tabs>
 
-      {activeTab === 0 ? (
-        <Box
-          sx={{
-            display: "flex",
-            flexDirection: { xs: "column", md: "row" },
-            gap: 3,
-          }}
+      <Box
+        {...handlers}
+        sx={{
+          position: "relative",
+          minHeight: "calc(100vh - 120px)",
+          touchAction: "pan-y",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        <Slide
+          direction="right"
+          in={activeTab === 0}
+          mountOnEnter
+          unmountOnExit
         >
-          <Box sx={{ flex: 1 }}>
-            <Calendar isDrawerOpen={isDrawerOpen} />
+          <Box
+            role="tabpanel"
+            sx={{
+              display: "flex",
+              flexDirection: { xs: "column", md: "row" },
+              gap: 3,
+              position: "absolute",
+              width: "100%",
+              left: 0,
+              right: 0,
+            }}
+          >
+            <Box sx={{ flex: 1 }}>
+              <Calendar isDrawerOpen={isDrawerOpen} />
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <Paper sx={{ p: 2, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  {selectedDate
+                    ? format(selectedDate, "yyyy年M月d日", { locale: ja })
+                    : "日付を選択してください"}
+                </Typography>
+                {selectedDate && (
+                  <Box sx={{ mt: 2, mb: 2 }}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      fullWidth
+                      startIcon={<AddIcon />}
+                      onClick={() => setIsFormOpen(true)}
+                      aria-label="セットを追加"
+                    >
+                      セットを追加
+                    </Button>
+                  </Box>
+                )}
+                {selectedWorkout ? (
+                  <WorkoutSets
+                    workout={selectedWorkout}
+                    onDelete={handleDelete}
+                  />
+                ) : (
+                  <Typography color="text.secondary">
+                    記録はありません
+                  </Typography>
+                )}
+              </Paper>
+            </Box>
           </Box>
-          <Box sx={{ flex: 1 }}>
-            <Paper sx={{ p: 2, mb: 2 }}>
+        </Slide>
+
+        <Slide direction="left" in={activeTab === 1} mountOnEnter unmountOnExit>
+          <Box
+            role="tabpanel"
+            sx={{
+              position: "absolute",
+              width: "100%",
+              left: 0,
+              right: 0,
+            }}
+          >
+            <Paper sx={{ p: 2 }}>
               <Typography variant="h6" gutterBottom>
-                {selectedDate
-                  ? format(selectedDate, "yyyy年M月d日", { locale: ja })
-                  : "日付を選択してください"}
+                フィード
               </Typography>
-              {selectedDate && (
-                <Box sx={{ mt: 2, mb: 2 }}>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    fullWidth
-                    startIcon={<AddIcon />}
-                    onClick={() => setIsFormOpen(true)}
-                    aria-label="セットを追加"
-                  >
-                    セットを追加
-                  </Button>
-                </Box>
-              )}
-              {selectedWorkout ? (
-                <WorkoutSets
-                  workout={selectedWorkout}
-                  onDelete={handleDelete}
-                />
-              ) : (
-                <Typography color="text.secondary">記録はありません</Typography>
-              )}
+              <Feed workouts={localWorkouts} />
             </Paper>
           </Box>
-        </Box>
-      ) : (
-        <Box>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              フィード
-            </Typography>
-            <Feed workouts={localWorkouts} />
-          </Paper>
-        </Box>
-      )}
+        </Slide>
+      </Box>
+
+      <SwipeableDrawer
+        anchor="left"
+        open={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onOpen={() => setIsSettingsOpen(true)}
+        sx={{
+          "& .MuiDrawer-paper": {
+            width: 280,
+            zIndex: 1200,
+          },
+        }}
+      >
+        <List>
+          {user && (
+            <>
+              <Link
+                href="/mypage"
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <ListItemButton onClick={() => setIsSettingsOpen(false)}>
+                  <ListItemIcon>
+                    <PersonIcon />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={user.displayName || user.email}
+                    secondary="ログイン中"
+                  />
+                </ListItemButton>
+              </Link>
+              <Divider />
+              <Typography variant="overline" sx={{ px: 2, py: 1 }}>
+                設定
+              </Typography>
+              <ListItemButton
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  setIsFormOpen(true);
+                }}
+              >
+                <ListItemIcon>
+                  <SettingsIcon />
+                </ListItemIcon>
+                <ListItemText primary="表示設定" />
+              </ListItemButton>
+              <ListItemButton>
+                <ListItemIcon>
+                  <NotificationsIcon />
+                </ListItemIcon>
+                <ListItemText primary="通知設定" />
+              </ListItemButton>
+              <ListItemButton>
+                <ListItemIcon>
+                  <PaletteIcon />
+                </ListItemIcon>
+                <ListItemText primary="テーマ設定" />
+              </ListItemButton>
+              <ListItemButton>
+                <ListItemIcon>
+                  <LanguageIcon />
+                </ListItemIcon>
+                <ListItemText primary="言語設定" />
+              </ListItemButton>
+              <Divider />
+              <Typography variant="overline" sx={{ px: 2, py: 1 }}>
+                その他
+              </Typography>
+              <ListItemButton>
+                <ListItemIcon>
+                  <HelpIcon />
+                </ListItemIcon>
+                <ListItemText primary="ヘルプ" />
+              </ListItemButton>
+              <ListItemButton>
+                <ListItemIcon>
+                  <InfoIcon />
+                </ListItemIcon>
+                <ListItemText primary="アプリについて" />
+              </ListItemButton>
+              <Divider />
+              <ListItemButton onClick={signOut}>
+                <ListItemIcon>
+                  <LogoutIcon />
+                </ListItemIcon>
+                <ListItemText primary="ログアウト" />
+              </ListItemButton>
+            </>
+          )}
+        </List>
+      </SwipeableDrawer>
 
       <Dialog
         fullScreen={isMobile}
