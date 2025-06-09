@@ -1,8 +1,9 @@
 export interface UserProfile {
   id: string;
-  displayName: string;
-  photoURL: string;
+  displayName?: string;
+  photoURL?: string;
   username: string;
-  createdAt: Date;
-  updatedAt: Date;
+  email: string;
+  createdAt?: Date;
+  updatedAt?: Date;
 }

@@ -12,28 +12,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-console.log("Firebase Config:", {
-  ...firebaseConfig,
-  apiKey: firebaseConfig.apiKey ? "***" : undefined,
-});
-
-// Initialize Firebase
+// Firebaseの初期化
 let app;
-if (getApps().length === 0) {
-  console.log("Initializing new Firebase app");
+if (!getApps().length) {
   app = initializeApp(firebaseConfig);
 } else {
-  console.log("Using existing Firebase app");
   app = getApps()[0];
 }
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-console.log("Firebase initialized with:", {
-  app: app.name,
-  auth: auth.app.name,
-  db: db.app.name,
-});
-
-export { auth, db };
+export const auth = getAuth(app);
+export const db = getFirestore(app);

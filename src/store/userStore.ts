@@ -1,150 +1,134 @@
 import { create } from "zustand";
 import { UserProfile } from "@/types/user";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  arrayUnion,
+  arrayRemove,
+  serverTimestamp,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { collection, getDocs, query, where } from "firebase/firestore";
 
 interface UserState {
   profile: UserProfile | null;
-  friends: { id: string; displayName: string; photoURL?: string }[];
-  isLoading: boolean;
-  error: string | null;
+  friends: UserProfile[];
+  profiles: { [key: string]: UserProfile };
+  setProfile: (profile: UserProfile | null) => void;
+  setFriends: (friends: UserProfile[]) => void;
+  setProfileById: (id: string, profile: UserProfile) => void;
   fetchProfile: (userId: string) => Promise<void>;
-  updateProfile: (profile: Partial<UserProfile>) => Promise<void>;
-  fetchFriends: () => Promise<void>;
-  addFriend: (friendId: string) => Promise<void>;
-  removeFriend: (friendId: string) => Promise<void>;
+  fetchFriends: (userId: string) => Promise<void>;
+  addFriend: (userId: string, friendId: string) => Promise<void>;
+  removeFriend: (userId: string, friendId: string) => Promise<void>;
 }
 
-export const useUserStore = create<UserState>((set) => ({
+export const useUserStore = create<UserState>((set, get) => ({
   profile: null,
   friends: [],
-  isLoading: false,
-  error: null,
+  profiles: {},
+  setProfile: (profile) => set({ profile }),
+  setFriends: (friends) => set({ friends }),
+  setProfileById: (id, profile) =>
+    set((state) => ({
+      profiles: { ...state.profiles, [id]: profile },
+    })),
   fetchProfile: async (userId: string) => {
-    set({ isLoading: true, error: null });
     try {
-      const docRef = doc(db, "users", userId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        set({
-          profile: {
-            id: docSnap.id,
-            displayName: data.displayName,
-            photoURL: data.photoURL,
-            username: data.username,
-            createdAt: data.createdAt.toDate(),
-            updatedAt: data.updatedAt.toDate(),
-          },
-        });
-      } else {
-        set({ error: "プロフィールが見つかりません" });
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        const profile: UserProfile = {
+          id: userId,
+          username: data.username || "",
+          email: data.email || "",
+          photoURL: data.photoURL,
+        };
+        set({ profile });
+        get().setProfileById(userId, profile);
       }
     } catch (error) {
-      set({ error: "プロフィールの取得に失敗しました" });
-    } finally {
-      set({ isLoading: false });
+      console.error("Error fetching profile:", error);
     }
   },
-  updateProfile: async (profile: Partial<UserProfile>) => {
-    set({ isLoading: true, error: null });
+  fetchFriends: async (userId: string) => {
     try {
-      const docRef = doc(db, "users", profile.id!);
-      await updateDoc(docRef, profile);
-      set((state) => ({
-        profile: state.profile ? { ...state.profile, ...profile } : null,
-        isLoading: false,
-      }));
-    } catch (error) {
-      set({ error: "プロフィールの更新に失敗しました" });
-    }
-  },
-  fetchFriends: async () => {
-    try {
-      set({ isLoading: true, error: null });
-      const { auth } = await import("@/lib/firebase");
-      const user = auth.currentUser;
-      if (!user) {
-        set({ error: "ユーザーが認証されていません" });
+      const userDoc = await getDoc(doc(db, "users", userId));
+      if (!userDoc.exists()) {
+        // ユーザードキュメントが存在しない場合は新規作成
+        await setDoc(doc(db, "users", userId), {
+          friends: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        set({ friends: [] });
         return;
       }
 
-      // 友達リストを取得
-      const friendsQuery = query(
-        collection(db, "friends"),
-        where("userId", "==", user.uid)
-      );
+      const data = userDoc.data();
+      const friendIds = data.friends || [];
 
-      const snapshot = await getDocs(friendsQuery);
-      const friends = snapshot.docs.map((doc) => {
-        const data = doc.data();
-        return {
-          id: data.friendId,
-          displayName: data.friendDisplayName || "不明なユーザー",
-          photoURL: data.friendPhotoURL,
-        };
-      });
+      const friends: UserProfile[] = [];
+      for (const friendId of friendIds) {
+        const friendDoc = await getDoc(doc(db, "users", friendId));
+        if (friendDoc.exists()) {
+          const friendData = friendDoc.data();
+          const profile: UserProfile = {
+            id: friendId,
+            username: friendData.username || "",
+            email: friendData.email || "",
+            photoURL: friendData.photoURL,
+          };
+          friends.push(profile);
+          get().setProfileById(friendId, profile);
+        }
+      }
 
-      set({ friends, isLoading: false });
+      set({ friends });
     } catch (error) {
       console.error("Error fetching friends:", error);
-      set({ error: "フレンドの取得に失敗しました" });
+      set({ friends: [] });
     }
   },
-  addFriend: async (friendId: string) => {
+  addFriend: async (userId: string, friendId: string) => {
     try {
-      set({ isLoading: true, error: null });
-      const { auth } = await import("@/lib/firebase");
-      const user = auth.currentUser;
-      if (!user) {
-        set({ error: "ユーザーが認証されていません" });
-        return;
-      }
-      const friendRef = doc(db, "users", friendId);
-      const friendDoc = await getDoc(friendRef);
-      if (!friendDoc.exists()) {
-        set({ error: "フレンドが見つかりません" });
-        return;
-      }
-      const friendData = friendDoc.data();
-      const friendsRef = doc(db, "users", user.uid, "friends", friendId);
-      await setDoc(friendsRef, {
-        displayName: friendData.displayName,
-        photoURL: friendData.photoURL,
+      // 自分のドキュメントにフレンドを追加
+      await updateDoc(doc(db, "users", userId), {
+        friends: arrayUnion(friendId),
       });
-      set((state) => ({
-        friends: [
-          ...state.friends,
-          {
-            id: friendId,
-            displayName: friendData.displayName,
-            photoURL: friendData.photoURL,
-          },
-        ],
-        isLoading: false,
-      }));
+
+      // 相手のドキュメントにも自分をフレンドとして追加
+      await updateDoc(doc(db, "users", friendId), {
+        friends: arrayUnion(userId),
+      });
+
+      // フレンドリストを再取得
+      await get().fetchFriends(userId);
     } catch (error) {
-      set({ error: "フレンドの追加に失敗しました" });
+      console.error("Error adding friend:", error);
+      throw error;
     }
   },
-  removeFriend: async (friendId: string) => {
+  removeFriend: async (userId: string, friendId: string) => {
     try {
-      set({ isLoading: true, error: null });
-      const { auth } = await import("@/lib/firebase");
-      const user = auth.currentUser;
-      if (!user) {
-        set({ error: "ユーザーが認証されていません" });
-        return;
-      }
-      const friendsRef = doc(db, "users", user.uid, "friends", friendId);
-      await deleteDoc(friendsRef);
-      set((state) => ({
-        friends: state.friends.filter((friend) => friend.id !== friendId),
-        isLoading: false,
-      }));
+      // 自分のドキュメントからフレンドを削除
+      await updateDoc(doc(db, "users", userId), {
+        friends: arrayRemove(friendId),
+      });
+
+      // 相手のドキュメントからも自分を削除
+      await updateDoc(doc(db, "users", friendId), {
+        friends: arrayRemove(userId),
+      });
+
+      // フレンドリストを再取得
+      await get().fetchFriends(userId);
     } catch (error) {
-      set({ error: "フレンドの削除に失敗しました" });
+      console.error("Error removing friend:", error);
+      throw error;
     }
   },
 }));

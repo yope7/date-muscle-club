@@ -32,11 +32,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
   useEffect(() => {
     if (user) {
-      console.log("ユーザー情報:", {
-        displayName: user.displayName,
-        email: user.email,
-        photoURL: user.photoURL,
-      });
+      // コンソール出力を削除
     }
   }, [user]);
 
@@ -68,7 +64,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
               onClick={() => setIsSettingsOpen(true)}
               aria-label="設定"
             >
-              <SettingsIcon />
+              {/* <SettingsIcon /> */}
             </IconButton>
             {user ? (
               <>

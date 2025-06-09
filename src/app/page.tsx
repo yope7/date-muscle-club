@@ -59,6 +59,7 @@ import {
 import Link from "next/link";
 import { useUserStore } from "@/store/userStore";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
+import { MyPage } from "@/components/MyPage";
 
 export default function Home() {
   const { user, signOut } = useAuth();
@@ -73,21 +74,6 @@ export default function Home() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { profile, fetchProfile, friends } = useUserStore();
-
-  useEffect(() => {
-    if (user) {
-      fetchProfile(user.uid);
-      fetchWorkouts(user.uid);
-    }
-  }, [user, fetchProfile, fetchWorkouts]);
-
-  useEffect(() => {
-    console.log("友人の情報:", {
-      friends,
-      profile,
-      user,
-    });
-  }, [friends, profile, user]);
 
   useEffect(() => {
     if (!user) {
@@ -130,6 +116,20 @@ export default function Home() {
     return () => unsubscribe();
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    fetchProfile(user.uid);
+    fetchWorkouts(user.uid);
+  }, [user, fetchProfile, fetchWorkouts]);
+
+  useEffect(() => {
+    // コンソール出力を削除
+  }, [friends, profile, user]);
+
   const selectedWorkout = selectedDate
     ? localWorkouts.find((w) => {
         const workoutDate = w.date.toDate();
@@ -153,15 +153,15 @@ export default function Home() {
         setIsSettingsOpen(false);
         return;
       }
-      if (activeTab === 0) {
-        setActiveTab(1);
+      if (activeTab < 2) {
+        setActiveTab(activeTab + 1);
       }
     },
     onSwipedRight: () => {
       if (activeTab === 0 && !isSettingsOpen) {
         setIsSettingsOpen(true);
-      } else if (activeTab === 1) {
-        setActiveTab(0);
+      } else if (activeTab > 0) {
+        setActiveTab(activeTab - 1);
       }
     },
     preventScrollOnSwipe: true,
@@ -242,10 +242,17 @@ export default function Home() {
         >
           <Tab label="カレンダー" />
           <Tab label="フィード" />
+          <Tab label="マイページ" />
         </Tabs>
 
         <Box sx={{ p: 2 }}>
-          {activeTab === 0 ? <Calendar /> : <Feed workouts={workouts} />}
+          {activeTab === 0 ? (
+            <Calendar />
+          ) : activeTab === 1 ? (
+            <Feed workouts={workouts} />
+          ) : (
+            <MyPage />
+          )}
         </Box>
       </Box>
 

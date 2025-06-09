@@ -45,7 +45,7 @@ export const Feed = ({ workouts }: FeedProps) => {
       // 自分のプロフィールを取得
       fetchProfile(user.uid);
       // フレンドリストを取得
-      fetchFriends();
+      fetchFriends(user.uid);
     }
   }, [user, fetchProfile, fetchFriends]);
 
@@ -62,11 +62,21 @@ export const Feed = ({ workouts }: FeedProps) => {
     if (userId === user?.uid) {
       return {
         id: user.uid,
-        displayName: profile?.displayName || user.displayName,
+        displayName:
+          profile?.username || user.email?.split("@")[0] || "ユーザー",
         photoURL: profile?.photoURL || user.photoURL || undefined,
       };
     }
-    return friends.find((friend) => friend.id === userId);
+    const friend = friends.find((friend) => friend.id === userId);
+    if (friend) {
+      return {
+        id: friend.id,
+        displayName:
+          friend.username || friend.email?.split("@")[0] || "ユーザー",
+        photoURL: friend.photoURL,
+      };
+    }
+    return null;
   };
 
   if (isLoading) {
@@ -121,7 +131,7 @@ export const Feed = ({ workouts }: FeedProps) => {
               >
                 <ListItemAvatar>
                   <Avatar src={userInfo?.photoURL || undefined}>
-                    {userInfo?.displayName?.charAt(0).toUpperCase()}
+                    {userInfo?.displayName?.charAt(0).toUpperCase() || "?"}
                   </Avatar>
                 </ListItemAvatar>
                 <Box sx={{ flex: 1 }}>
