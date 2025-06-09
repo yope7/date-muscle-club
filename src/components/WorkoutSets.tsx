@@ -73,11 +73,11 @@ export const WorkoutSets = ({
     setDeleteWorkoutDialogOpen(true);
   };
 
-  const confirmDeleteWorkout = () => {
+  const confirmDeleteWorkout = async () => {
     if (onDelete) {
-      onDelete(workout);
+      await onDelete(workout);
+      setDeleteWorkoutDialogOpen(false);
     }
-    setDeleteWorkoutDialogOpen(false);
   };
 
   const handleAddSet = async () => {

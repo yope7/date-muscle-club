@@ -116,7 +116,7 @@ const WorkoutForm = ({ onComplete }: Props) => {
       id: existingWorkout?.id || crypto.randomUUID(),
       userId: user.uid,
       date: Timestamp.fromDate(selectedDate),
-      sets: [...(existingWorkout?.sets || []), ...sets],
+      sets: sets, // 既存のセットと結合せず、新しいセットのみを使用
       memo: existingWorkout?.memo || "",
       tags: existingWorkout?.tags || [],
       createdAt: existingWorkout?.createdAt || Timestamp.fromDate(new Date()),
