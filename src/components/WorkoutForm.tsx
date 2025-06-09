@@ -89,7 +89,7 @@ const WorkoutForm = ({ onComplete }: Props) => {
 
   const handleSaveSet = async () => {
     if (!isValid(selectedDate)) {
-      console.error('Invalid date:', selectedDate);
+      alert("日付が無効です");
       return;
     }
 
