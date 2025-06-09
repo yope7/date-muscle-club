@@ -61,7 +61,10 @@ export const addWorkout = async (
       // 既存のワークアウトがある場合は更新
       const updatedWorkout: WorkoutRecord = {
         ...existingWorkout,
-        sets: [...existingWorkout.sets, ...workout.sets],
+        // 最後の1セットだけを追加
+        sets: [...existingWorkout.sets, workout.sets[workout.sets.length - 1]],
+        memo: workout.memo || existingWorkout.memo,
+        tags: [...new Set([...existingWorkout.tags, ...workout.tags])],
         updatedAt: Timestamp.fromDate(new Date()),
       };
       await updateWorkout(updatedWorkout);

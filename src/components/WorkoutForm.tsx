@@ -111,30 +111,49 @@ const WorkoutForm = ({ onComplete }: Props) => {
       return;
     }
 
+    console.log("=== handleSaveSet ===");
+    console.log("Selected Date:", selectedDate);
+    console.log("Existing Workout:", existingWorkout);
+    console.log("Current Sets:", sets);
+
     // 既存のワークアウトを取得または新規作成
     const workout: WorkoutRecord = {
       id: existingWorkout?.id || crypto.randomUUID(),
       userId: user.uid,
       date: Timestamp.fromDate(selectedDate),
-      sets: sets, // 既存のセットと結合せず、新しいセットのみを使用
-      memo: existingWorkout?.memo || "",
-      tags: existingWorkout?.tags || [],
+      // 最後の1セットだけを追加
+      sets: existingWorkout
+        ? [...existingWorkout.sets, sets[sets.length - 1]]
+        : [sets[sets.length - 1]],
+      memo: existingWorkout?.memo || memo,
+      tags: existingWorkout?.tags || tags,
       createdAt: existingWorkout?.createdAt || Timestamp.fromDate(new Date()),
       updatedAt: Timestamp.fromDate(new Date()),
     };
 
-    // 既存のワークアウトがある場合は更新、ない場合は新規作成
-    if (existingWorkout) {
-      await updateWorkout(workout);
-    } else {
-      await addWorkout(workout);
-    }
+    console.log("New Workout Object:", workout);
 
-    // セットの入力フォームをリセット
-    setSets([{ weight: 25, reps: 0 }]);
+    try {
+      // 既存のワークアウトがある場合は更新、ない場合は新規作成
+      if (existingWorkout) {
+        console.log("Updating existing workout");
+        await updateWorkout(workout);
+      } else {
+        console.log("Creating new workout");
+        await addWorkout(workout);
+      }
 
-    if (onComplete) {
-      onComplete();
+      // セットの入力フォームをリセット
+      setSets([{ weight: 25, reps: 0 }]);
+      setMemo("");
+      setTags([]);
+
+      if (onComplete) {
+        onComplete();
+      }
+    } catch (error) {
+      console.error("Error saving workout:", error);
+      alert("ワークアウトの保存に失敗しました");
     }
   };
 

@@ -73,38 +73,43 @@ export const WorkoutSets = ({
     setDeleteWorkoutDialogOpen(true);
   };
 
-  const confirmDeleteWorkout = async () => {
+  const confirmDeleteWorkout = () => {
     if (onDelete) {
-      await onDelete(workout);
-      setDeleteWorkoutDialogOpen(false);
+      onDelete(workout);
     }
+    setDeleteWorkoutDialogOpen(false);
   };
 
   const handleAddSet = async () => {
     if (!newSet.weight || !newSet.reps) return;
 
-    const updatedSets = [
-      ...workout.sets,
-      {
-        weight: Number(newSet.weight),
-        reps: Number(newSet.reps),
-      },
-    ];
+    try {
+      const updatedSets = [
+        ...workout.sets,
+        {
+          weight: Number(newSet.weight),
+          reps: Number(newSet.reps),
+        },
+      ];
 
-    const updatedWorkout: WorkoutRecord = {
-      ...workout,
-      sets: updatedSets,
-      updatedAt: Timestamp.fromDate(new Date()),
-    };
+      const updatedWorkout: WorkoutRecord = {
+        ...workout,
+        sets: updatedSets,
+        updatedAt: Timestamp.fromDate(new Date()),
+      };
 
-    if (workout.id) {
-      await updateWorkout(updatedWorkout);
-    } else {
-      await addWorkout(updatedWorkout);
+      if (workout.id) {
+        await updateWorkout(updatedWorkout);
+      } else {
+        await addWorkout(updatedWorkout);
+      }
+
+      setNewSet({ weight: "", reps: "" });
+      setNewSetDialogOpen(false);
+    } catch (error) {
+      console.error("Error adding set:", error);
+      alert("セットの追加に失敗しました");
     }
-
-    setNewSet({ weight: "", reps: "" });
-    setNewSetDialogOpen(false);
   };
 
   return (
