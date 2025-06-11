@@ -181,6 +181,7 @@ export default function Home() {
     },
     preventScrollOnSwipe: true,
     trackMouse: true,
+    delta: 50,  // px
   });
 
   if (!user) {
