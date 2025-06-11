@@ -32,9 +32,11 @@ import {
   onSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { WorkoutRecord } from "@/types/workout";
 
 interface WorkoutGraphsProps {
   userId?: string;
+  workouts: WorkoutRecord[];
 }
 
 interface TabPanelProps {
@@ -59,7 +61,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId }) => {
+export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

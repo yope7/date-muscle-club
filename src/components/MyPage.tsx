@@ -5,6 +5,7 @@ import { useUserStore } from "@/store/userStore";
 import { WorkoutGraphs } from "./WorkoutGraphs";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { WorkoutStats } from "./WorkoutStats";
+import { WorkoutHistory } from "./WorkoutHistory";
 
 export const MyPage: React.FC = () => {
   const { user } = useAuth();
@@ -42,6 +43,7 @@ export const MyPage: React.FC = () => {
         <Box sx={{ flexGrow: 1 }}>
           <WorkoutStats workouts={workouts} />
           <WorkoutGraphs workouts={workouts} />
+          <WorkoutHistory workouts={workouts} />
         </Box>
       </Paper>
     </Box>
