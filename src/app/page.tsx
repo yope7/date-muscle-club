@@ -238,22 +238,28 @@ export default function Home() {
         </Tabs>
       </Box>
       <Box {...handlers}>
-        <TabPanel value={value} index={0}>
-          <Calendar isDrawerOpen={isDrawerOpen} />
-        </TabPanel>
-        <TabPanel value={value} index={1}>
-          <Feed
-            workouts={workouts}
-            onRefresh={async () => {
-              if (user) {
-                await fetchWorkouts(user.uid);
-              }
-            }}
-          />
-        </TabPanel>
-        <TabPanel value={value} index={2}>
-          <MyPage />
-        </TabPanel>
+        {value === 0 && (
+          <Box sx={{ p: 2 }}>
+            <Calendar isDrawerOpen={isDrawerOpen} />
+          </Box>
+        )}
+        {value === 1 && (
+          <Box sx={{ p: 2 }}>
+            <Feed
+              workouts={workouts}
+              onRefresh={async () => {
+                if (user) {
+                  await fetchWorkouts(user.uid);
+                }
+              }}
+            />
+          </Box>
+        )}
+        {value === 2 && (
+          <Box sx={{ p: 2 }}>
+            <MyPage />
+          </Box>
+        )}
       </Box>
 
       <Dialog

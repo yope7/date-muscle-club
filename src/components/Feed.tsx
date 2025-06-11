@@ -38,6 +38,7 @@ import {
   EmojiEvents as EmojiEventsIcon,
   SelfImprovement as SelfImprovementIcon,
   AutoAwesome as AutoAwesomeIcon,
+  DirectionsBike as DirectionsBikeIcon,
 } from "@mui/icons-material";
 import { useUserStore } from "@/store/userStore";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -68,7 +69,7 @@ const SYSTEM_USERS = [
   {
     id: "system_god",
     displayName: "GOD",
-    icon: <AutoAwesomeIcon sx={{ fontSize: 20, color: "warning.main" }} />,
+    icon: "🌟",
     messages: [
       "素晴らしい記録だ！",
       "その努力、認める！",
@@ -80,7 +81,7 @@ const SYSTEM_USERS = [
   {
     id: "system_macho",
     displayName: "マッチョマン",
-    icon: <FitnessCenterIcon sx={{ fontSize: 20, color: "primary.main" }} />,
+    icon: "💪",
     messages: [
       "ナイスワーク！その筋肉の成長が見えるぜ！💪",
       "お前の努力が実を結んでるな！",
@@ -92,7 +93,7 @@ const SYSTEM_USERS = [
   {
     id: "system_ojosama",
     displayName: "お嬢様",
-    icon: <LocalFloristIcon sx={{ fontSize: 20, color: "secondary.main" }} />,
+    icon: "🌸",
     messages: [
       "まぁ、素晴らしいわ！",
       "その努力、認めてあげるわ！",
@@ -106,7 +107,7 @@ const SYSTEM_USERS = [
   {
     id: "system_coach",
     displayName: "熱血コーチ",
-    icon: <EmojiEventsIcon sx={{ fontSize: 20, color: "warning.main" }} />,
+    icon: "🏆",
     messages: [
       "いいぞ！その調子だ！",
       "限界を超えていけ！",
@@ -118,13 +119,13 @@ const SYSTEM_USERS = [
   {
     id: "system_otaku",
     displayName: "GOD",
-    icon: <SportsGymnasticsIcon sx={{ fontSize: 40, color: "success.main" }} />,
+    icon: "🎮",
     messages: ["やるのぉ", "力が欲しいか", "筋肉をやろう"],
   },
   {
     id: "system_yogini",
     displayName: "ヨガインストラクター",
-    icon: <SelfImprovementIcon sx={{ fontSize: 40, color: "info.main" }} />,
+    icon: "🧘‍♀️",
     messages: [
       "素晴らしい呼吸と共に、その努力を讃えましょう！",
       "心と体の調和が感じられます！",
@@ -145,9 +146,30 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const { friendWorkouts, fetchFriendWorkouts, isLoading, error } =
     useWorkoutStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pullDistance, setPullDistance] = useState(0);
+  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(false);
   const [isUpdatingRecords, setIsUpdatingRecords] = useState(false);
-  const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(true);
+  const [cachedWorkouts, setCachedWorkouts] = useState<WorkoutRecord[]>([]);
+  const [cachedLikes, setCachedLikes] = useState<{ [key: string]: boolean }>({});
+  const [cachedLikeCounts, setCachedLikeCounts] = useState<{ [key: string]: number }>({});
+  const [cachedLikeUsers, setCachedLikeUsers] = useState<{
+    [key: string]: Array<{
+      id: string;
+      displayName: string;
+      photoURL?: string;
+    }>;
+  }>({});
+  const [cachedComments, setCachedComments] = useState<{
+    [key: string]: Array<{
+      id: string;
+      content: string;
+      userId: string;
+      createdAt: Date;
+      user: {
+        displayName: string;
+        photoURL?: string;
+      };
+    }>;
+  }>({});
   const [likes, setLikes] = useState<{ [key: string]: boolean }>({});
   const [likeCounts, setLikeCounts] = useState<{ [key: string]: number }>({});
   const [likeUsers, setLikeUsers] = useState<{
@@ -172,49 +194,77 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const [commentOpen, setCommentOpen] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
-  const startY = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const PULL_THRESHOLD = 100;
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート
-  const allWorkouts = React.useMemo(() => {
-    if (isLoadingWorkouts) return [];
+  // workoutsとfriendWorkoutsの変更を監視してキャッシュを更新
+  useEffect(() => {
+    if (workouts.length > 0 || friendWorkouts.length > 0) {
+      const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
+        (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+      );
+      setCachedWorkouts(updatedWorkouts);
+      setCachedLikes(likes);
+      setCachedLikeCounts(likeCounts);
+      setCachedLikeUsers(likeUsers);
+      setCachedComments(comments);
+    }
+  }, [workouts, friendWorkouts, likes, likeCounts, likeUsers, comments]);
 
-    return [...workouts, ...friendWorkouts].sort(
-      (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
-    );
-  }, [workouts, friendWorkouts, isLoadingWorkouts]);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (containerRef.current?.scrollTop === 0) {
-      startY.current = e.touches[0].clientY;
+  const handleRefresh = async () => {
+    if (!onRefresh) return;
+    setIsRefreshing(true);
+    try {
+      // 0.5秒待機
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await onRefresh();
+      // 更新後にデータをキャッシュに保存
+      const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
+        (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+      );
+      setCachedWorkouts(updatedWorkouts);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (startY.current === null) return;
+  useEffect(() => {
+    if (!user) return;
 
-    const currentY = e.touches[0].clientY;
-    const distance = currentY - startY.current;
+    const fetchWorkouts = async () => {
+      // キャッシュにデータがない場合のみデータを取得
+      if (cachedWorkouts.length === 0) {
+        setIsLoadingWorkouts(true);
+        try {
+          const workoutsQuery = query(
+            collection(db, "workouts"),
+            where("userId", "==", user.uid)
+          );
+          const snapshot = await getDocs(workoutsQuery);
+          const workoutData = snapshot.docs.map((doc) => {
+            const data = doc.data();
+            return {
+              id: doc.id,
+              ...data,
+              isNewRecord: Boolean(data.isNewRecord),
+              date: data.date,
+              sets: data.sets || [],
+            };
+          }) as WorkoutRecord[];
 
-    if (distance > 0 && containerRef.current?.scrollTop === 0) {
-      setPullDistance(Math.min(distance * 0.5, PULL_THRESHOLD));
-    }
-  };
-
-  const handleTouchEnd = async () => {
-    if (pullDistance >= PULL_THRESHOLD && onRefresh) {
-      setIsRefreshing(true);
-      try {
-        await onRefresh();
-      } finally {
-        setIsRefreshing(false);
+          // データをキャッシュに保存
+          setCachedWorkouts([...workoutData, ...friendWorkouts].sort(
+            (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+          ));
+        } catch (error) {
+          console.error("Error fetching workouts:", error);
+        } finally {
+          setIsLoadingWorkouts(false);
+        }
       }
-    }
-    setPullDistance(0);
-    startY.current = null;
-  };
+    };
+
+    fetchWorkouts();
+  }, [user, friendWorkouts]);
 
   useEffect(() => {
     if (user) {
@@ -233,10 +283,10 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     }
   }, [friends, fetchFriendWorkouts]);
 
+  // いいねの状態を監視
   useEffect(() => {
     if (!user) return;
 
-    // いいねの状態を監視
     const likesQuery = query(
       collection(db, "likes"),
       where("userId", "==", user.uid)
@@ -249,6 +299,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         newLikes[data.workoutId] = true;
       });
       setLikes(newLikes);
+      setCachedLikes(newLikes);
     });
 
     return () => {
@@ -256,8 +307,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     };
   }, [user]);
 
+  // 各投稿のいいね数とユーザー情報を取得
   useEffect(() => {
-    // 各投稿のいいね数とユーザー情報を取得
     const allWorkouts = [...workouts, ...friendWorkouts];
     allWorkouts.forEach(async (workout) => {
       const likesQuery = query(
@@ -284,8 +335,16 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           ...prev,
           [workout.id]: users.length,
         }));
+        setCachedLikeCounts((prev) => ({
+          ...prev,
+          [workout.id]: users.length,
+        }));
 
         setLikeUsers((prev) => ({
+          ...prev,
+          [workout.id]: users,
+        }));
+        setCachedLikeUsers((prev) => ({
           ...prev,
           [workout.id]: users,
         }));
@@ -295,8 +354,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     });
   }, [workouts, friendWorkouts]);
 
+  // 各投稿のコメントを取得
   useEffect(() => {
-    // 各投稿のコメントを取得
     const allWorkouts = [...workouts, ...friendWorkouts];
     allWorkouts.forEach(async (workout) => {
       const commentsQuery = query(
@@ -334,52 +393,35 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           ...prev,
           [workout.id]: comments,
         }));
+        setCachedComments((prev) => ({
+          ...prev,
+          [workout.id]: comments,
+        }));
       });
 
       return () => unsubscribe();
     });
   }, [workouts, friendWorkouts]);
 
-  useEffect(() => {
-    if (!user) return;
+  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート
+  const allWorkouts = React.useMemo(() => {
+    if (cachedWorkouts.length > 0) {
+      return cachedWorkouts;
+    }
+    return [...workouts, ...friendWorkouts].sort(
+      (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+    );
+  }, [workouts, friendWorkouts, cachedWorkouts]);
 
-    const fetchWorkouts = async () => {
-      setIsLoadingWorkouts(true);
-      try {
-        // 1秒待ってからデータを取得
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        const workoutsQuery = query(
-          collection(db, "workouts"),
-          where("userId", "==", user.uid)
-        );
-        const snapshot = await getDocs(workoutsQuery);
-        const workoutData = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            ...data,
-            isNewRecord: Boolean(data.isNewRecord),
-            date: data.date,
-            sets: data.sets || [],
-          };
-        }) as WorkoutRecord[];
-      } catch (error) {
-        console.error("Error fetching workouts:", error);
-      } finally {
-        setIsLoadingWorkouts(false);
-      }
+  // いいねとコメントの情報を取得
+  const getWorkoutInteractions = (workoutId: string) => {
+    return {
+      likes: cachedLikes[workoutId] || false,
+      likeCount: cachedLikeCounts[workoutId] || 0,
+      likeUsers: cachedLikeUsers[workoutId] || [],
+      comments: cachedComments[workoutId] || [],
     };
-
-    fetchWorkouts();
-
-    // クリーンアップ関数
-    return () => {
-      if (fetchTimeoutRef.current) {
-        clearTimeout(fetchTimeoutRef.current);
-      }
-    };
-  }, [user]);
+  };
 
   // システムコメントを投稿する関数
   const postSystemComment = async (
@@ -729,6 +771,12 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
       await batch.commit();
       console.log("最高記録の更新が完了しました");
+
+      // 更新後にキャッシュを更新
+      const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
+        (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+      );
+      setCachedWorkouts(updatedWorkouts);
     } catch (error) {
       console.error("最高記録の更新に失敗しました:", error);
     } finally {
@@ -786,42 +834,86 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           touchAction: "pan-y",
           WebkitOverflowScrolling: "touch",
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
         <Box
           sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            height: pullDistance,
-            transform: `translateY(${pullDistance}px)`,
-            transition: "transform 0.2s ease-out",
+            p: 1,
+            borderBottom: 1,
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            position: "relative",
+            overflow: "hidden",
+            height: "60px",
           }}
         >
-          {isRefreshing ? (
-            <CircularProgress size={24} />
-          ) : (
-            <Typography
-              variant="body2"
-              color="text.secondary"
+          <Button
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            sx={{
+              color: "text.secondary",
+              "&:hover": {
+                bgcolor: "action.hover",
+              },
+              minWidth: "100px",
+              zIndex: 1,
+            }}
+          >
+            {isRefreshing ? "更新中..." : "更新"}
+          </Button>
+          {isRefreshing && (
+            <Box
               sx={{
-                opacity: pullDistance / PULL_THRESHOLD,
+                position: "absolute",
+                left: 0,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: "100%",
+                height: "40px",
+                backgroundColor: "divider",
+                overflow: "hidden",
               }}
             >
-              引っ張って更新
-            </Typography>
+              <Box
+                sx={{
+                  position: "absolute",
+                  left: 0,
+                  top: 0,
+                  height: "100%",
+                  width: "100%",
+                  animation: "bikeRide 2s forwards",
+                  "@keyframes bikeRide": {
+                    "0%": {
+                      transform: "translateX(-100%)",
+                    },
+                    "100%": {
+                      transform: "translateX(100%)",
+                    },
+                  },
+                }}
+              >
+                <DirectionsBikeIcon
+                  sx={{
+                    position: "absolute",
+                    right: 0,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "primary.main",
+                    fontSize: "2rem",
+                    filter: "drop-shadow(0 0 2px rgba(0,0,0,0.2))",
+                  }}
+                />
+              </Box>
+            </Box>
           )}
         </Box>
 
-        <List sx={{ pt: pullDistance }}>
+        <List>
           {allWorkouts.map((workout, index) => {
             const userInfo = getUserInfo(workout.userId);
+            const interactions = getWorkoutInteractions(workout.id);
             return (
               <React.Fragment key={workout.id}>
                 <Paper
@@ -900,22 +992,10 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                           <Chip
                             key={setIndex}
                             label={`${set.weight}kg × ${set.reps}回`}
-                            size="small"
                           />
                         ))}
                       </Stack>
-                      {workout.memo && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ mt: 1 }}
-                        >
-                          {workout.memo}
-                        </Typography>
-                      )}
                     </Box>
-
-                    <Divider sx={{ width: "100%", mb: 1 }} />
 
                     <Box
                       sx={{
@@ -928,17 +1008,17 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                         <IconButton
                           size="small"
                           onClick={() => handleLike(workout.id)}
-                          color={likes[workout.id] ? "error" : "default"}
+                          color={interactions.likes ? "error" : "default"}
                         >
-                          {likes[workout.id] ? (
+                          {interactions.likes ? (
                             <FavoriteIcon />
                           ) : (
                             <FavoriteBorderIcon />
                           )}
                         </IconButton>
-                        {likeCounts[workout.id] > 0 && (
+                        {interactions.likeCount > 0 && (
                           <Typography variant="caption" color="text.secondary">
-                            {likeCounts[workout.id]}
+                            {interactions.likeCount}
                           </Typography>
                         )}
                       </Box>
@@ -949,9 +1029,9 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                         >
                           <CommentIcon />
                         </IconButton>
-                        {comments[workout.id]?.length > 0 && (
+                        {interactions.comments.length > 0 && (
                           <Typography variant="caption" color="text.secondary">
-                            {comments[workout.id].length}
+                            {interactions.comments.length}
                           </Typography>
                         )}
                       </Box>
@@ -960,32 +1040,29 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                       </IconButton>
                     </Box>
 
-                    {likeUsers[workout.id]?.length > 0 && (
+                    {interactions.likeUsers.length > 0 && (
                       <Box sx={{ width: "100%", mt: 1 }}>
                         <Stack direction="row" spacing={1} alignItems="center">
-                          {likeUsers[workout.id].slice(0, 3).map((user) => (
+                          {interactions.likeUsers.slice(0, 3).map((user) => (
                             <Avatar
                               key={user.id}
                               src={user.photoURL}
                               sx={{ width: 24, height: 24 }}
                             />
                           ))}
-                          {likeUsers[workout.id].length > 3 && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
-                            >
-                              他{likeUsers[workout.id].length - 3}人
+                          {interactions.likeUsers.length > 3 && (
+                            <Typography variant="caption" color="text.secondary">
+                              他{interactions.likeUsers.length - 3}人
                             </Typography>
                           )}
                         </Stack>
                       </Box>
                     )}
 
-                    {comments[workout.id]?.length > 0 && (
+                    {interactions.comments.length > 0 && (
                       <Box sx={{ width: "100%", mt: 2, pl: 2 }}>
                         <Stack spacing={1}>
-                          {getSortedComments(workout.id).map((comment) => {
+                          {interactions.comments.map((comment) => {
                             const systemUser = SYSTEM_USERS.find(
                               (user) => user.id === comment.userId
                             );
@@ -998,58 +1075,22 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                   gap: 1,
                                 }}
                               >
-                                <Avatar
-                                  sx={{
-                                    width: 24,
-                                    height: 24,
-                                    mt: 0.5,
-                                    bgcolor: systemUser
-                                      ? "transparent"
-                                      : undefined,
-                                  }}
-                                >
-                                  {systemUser ? (
-                                    systemUser.icon
-                                  ) : (
-                                    <Typography variant="caption">
-                                      {comment.user.displayName.charAt(0)}
-                                    </Typography>
-                                  )}
-                                </Avatar>
-                                <Box sx={{ flex: 1 }}>
-                                  <Box
+                                <ListItemAvatar>
+                                  <Avatar
                                     sx={{
-                                      display: "flex",
-                                      justifyContent: "space-between",
-                                      alignItems: "center",
+                                      width: 24,
+                                      height: 24,
+                                      bgcolor: systemUser ? "primary.main" : "grey.500",
                                     }}
                                   >
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                    >
-                                      {comment.user.displayName}
-                                    </Typography>
-                                    {(comment.userId === user?.uid ||
-                                      SYSTEM_USERS.some(
-                                        (sysUser) =>
-                                          sysUser.id === comment.userId
-                                      )) && (
-                                      <IconButton
-                                        size="small"
-                                        onClick={() =>
-                                          handleDeleteComment(
-                                            comment.id,
-                                            comment.userId
-                                          )
-                                        }
-                                        sx={{ p: 0.5 }}
-                                      >
-                                        <DeleteIcon fontSize="small" />
-                                      </IconButton>
-                                    )}
-                                  </Box>
+                                    {systemUser?.icon || "?"}
+                                  </Avatar>
+                                </ListItemAvatar>
+                                <Box>
                                   <Typography variant="body2">
+                                    {systemUser?.displayName || "不明なユーザー"}
+                                  </Typography>
+                                  <Typography variant="caption" color="text.secondary">
                                     {comment.content}
                                   </Typography>
                                 </Box>
@@ -1068,33 +1109,20 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         </List>
       </Box>
 
-      <Dialog
-        open={commentOpen}
-        onClose={handleCommentClose}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>コメントを投稿</DialogTitle>
+      <Dialog open={commentOpen} onClose={handleCommentClose}>
+        <DialogTitle>コメントを入力</DialogTitle>
         <DialogContent>
           <TextField
             fullWidth
             multiline
-            rows={3}
-            placeholder="コメントを入力..."
+            rows={4}
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            sx={{ mt: 2 }}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCommentClose}>キャンセル</Button>
-          <Button
-            onClick={handleCommentSubmit}
-            variant="contained"
-            disabled={!newComment.trim()}
-          >
-            投稿
-          </Button>
+          <Button onClick={handleCommentSubmit}>投稿</Button>
         </DialogActions>
       </Dialog>
     </>
