@@ -1,9 +1,8 @@
-
 # 【ネタ開発】筋トレ記録アプリ
 
 ## 概要
 
-ベンチプレスの成長が嬉しい。記録したい。でもみんなに見せるようなもんでもないから自分専用で記録したい。
+ベンチプレスの成長が嬉しい。でも、みんなに見せるようなもんでもないから自分専用で記録したい。
 
 そんなあなたに筋トレ記録アプリ
 
@@ -12,6 +11,11 @@
 - 自身のトレーニングを記録・振り返りたい方
 - 知人やトレーナーと進捗を共有したい方
 - トレーニングの継続を目指す方
+- 筋トレをしない人←これから始めよう
+
+## ScreenShots
+![カレンダーによる記録UI](./img/mainpage.png)
+![フィード機能](./img/feed.png)
 
 ## 主な機能
 
@@ -22,53 +26,56 @@
 
 ### 2. トレーニング記録機能
 - 日付ごとのトレーニング記録
-- セットごとの重量と回数の記録
-- 自由記述メモやタグ付け機能
+- セットごとの重量と回数の記録（スライダーUI対応）
 
 ### 3. カレンダー機能
 - 月表示のカレンダーでトレーニング実施日を視覚的に表示
 - 負荷スコアに応じた色分けやアイコン表示
+- 表示モード切替機能（カラー表示/フレーム表示）
+
 
 ### 4. 統計機能
 - 総トレーニング回数、セット数、レップ数、最高重量の表示
-- グラフでのデータ可視化
+- グラフでのデータ可視化（WIP）
+  - 期間選択機能（1週間/1ヶ月/3ヶ月/すべて）
+  - 最高重量の推移
+  - 1日の総挙上量
+  - 1日あたりの総セット数・平均回数
 
-### 5. 友達機能
+### 5. フィード機能
+- チームメンバーの最新トレーニング記録の表示
+- いいね・コメント機能
+- 自己ベスト更新時の自動投稿（盛り上げてくれる愉快な仲間botたち）
+- フィルタリング機能（種目別、期間別）
+
+### 6. 友達機能
 - 友達招待や承認機能
 - 友達のトレーニング記録の共有
 
+### 7. マイページ機能
+- ユーザー情報の表示
+- チームメンバー一覧
+- 自己最高記録の表示
+- 統計グラフの表示
+
 ## 技術スタック
 
-- **フロントエンド**: Next.js, React, TypeScript, Material-UI, Recharts
-- **バックエンド**: Firebase (Authentication, Cloud Firestore, Hosting)
+### フロントエンド
+- **フレームワーク**: Next.js 15.3.3
+- **言語**: TypeScript
+- **UI**: Material-UI 7.1.1, Tailwind CSS 4
+- **状態管理**: Zustand 5.0.5
+- **グラフ**: Recharts 2.15.3
+- **日付処理**: date-fns 4.1.0
+- **アニメーション**: react-swipeable 7.0.2
 
-## データ構造
+### バックエンド
+- **認証・データベース**: Firebase
+  - Authentication
+  - Cloud Firestore
+  - Hosting
+  - Storage
 
-アプリはFirestoreを使用してデータを管理しています。以下は主要なデータ構造の一部です。
-
-### ユーザー
-```typescript
-interface User {
-  id: string;
-  email: string;
-  displayName?: string;
-  photoURL?: string;
-}
-```
-
-### トレーニング記録
-```typescript
-interface WorkoutRecord {
-  id: string;
-  userId: string;
-  date: Timestamp;
-  sets: WorkoutSet[];
-  memo?: string;
-  tags?: string[];
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
-}
-```
 
 ## セキュリティ
 
@@ -98,4 +105,4 @@ interface WorkoutRecord {
    npm run dev
    ```
 
-4. ブラウザで `http://localhost:3000` にアクセスします。
+4. ブラウザで `http://localhost:3000` にアクセス
