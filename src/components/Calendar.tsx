@@ -221,7 +221,14 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
   return (
     <Box
-      sx={{ width: "100%", maxWidth: { xs: "100%", sm: "600px" }, mx: "auto" }}
+      sx={{
+        width: "100%",
+        maxWidth: { xs: "100%", sm: "600px" },
+        mx: "auto",
+        minHeight: "calc(100vh - 120px)",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
       <Box
         sx={{

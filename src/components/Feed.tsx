@@ -831,7 +831,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           height: "100%",
           overflow: "auto",
           position: "relative",
-          touchAction: "pan-y",
+          touchAction: "pan-x pan-y",
           WebkitOverflowScrolling: "touch",
         }}
       >

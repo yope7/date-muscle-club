@@ -216,6 +216,8 @@ export default function Home() {
         flexDirection: "column",
         minHeight: "100vh",
         bgcolor: "background.default",
+        overflow: "auto",
+        touchAction: "pan-x pan-y",
       }}
     >
       <SettingsDrawer open={isDrawerOpen} onClose={() => {}} />
@@ -237,14 +239,21 @@ export default function Home() {
           <Tab label="マイページ" />
         </Tabs>
       </Box>
-      <Box {...handlers}>
+      <Box {...handlers} sx={{ 
+        overflow: "auto", 
+        touchAction: "pan-x pan-y",
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        minHeight: "calc(100vh - 48px)", // タブバーの高さを考慮
+      }}>
         {value === 0 && (
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: 2, flex: 1 }}>
             <Calendar isDrawerOpen={isDrawerOpen} />
           </Box>
         )}
         {value === 1 && (
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: 2, flex: 1 }}>
             <Feed
               workouts={workouts}
               onRefresh={async () => {
@@ -256,7 +265,7 @@ export default function Home() {
           </Box>
         )}
         {value === 2 && (
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: 2, flex: 1 }}>
             <MyPage />
           </Box>
         )}
