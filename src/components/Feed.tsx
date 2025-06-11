@@ -836,6 +836,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         }}
       >
         <Box
+          onClick={handleRefresh}
           sx={{
             display: "flex",
             justifyContent: "center",
@@ -850,7 +851,6 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           }}
         >
           <Button
-            onClick={handleRefresh}
             disabled={isRefreshing}
             sx={{
               color: "text.secondary",
