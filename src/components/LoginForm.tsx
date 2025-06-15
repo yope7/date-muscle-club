@@ -29,10 +29,10 @@ export const LoginForm = () => {
           startIcon={<GoogleIcon />}
           size="large"
           sx={{
-            bgcolor: 'white',
-            color: 'text.primary',
+            bgcolor: 'lightblue',
+            color: 'black',
             '&:hover': {
-              bgcolor: 'grey.100',
+              bgcolor: 'white',
             },
             px: 4,
             py: 1.5,
@@ -58,9 +58,6 @@ export const LoginForm = () => {
           ゲストとして利用
         </Button>
 
-        <Typography variant="body2" color="text.secondary" align="center">
-          ※ゲストとして利用した場合でも、後からGoogleアカウントに紐付けることができます
-        </Typography>
       </Box>
     </Container>
   );

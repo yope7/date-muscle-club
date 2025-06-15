@@ -154,7 +154,7 @@ export const FriendsList: React.FC<FriendsListProps> = ({ onClose }) => {
                 <Avatar src={profile?.photoURL || undefined} />
               </ListItemAvatar>
               <ListItemText
-                primary={profile?.username || friend.displayName || "ユーザー"}
+                primary={profile?.displayName || profile?.username || "ユーザー"}
                 secondary={profile?.email || friend.email}
               />
             </ListItemButton>
@@ -198,7 +198,7 @@ export const FriendsList: React.FC<FriendsListProps> = ({ onClose }) => {
                 />
                 <Box>
                   <Typography variant="h5" gutterBottom>
-                    {selectedProfile?.username || "ユーザー"}
+                    {selectedProfile?.displayName || selectedProfile?.username || "ユーザー"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {selectedProfile?.email}
@@ -208,7 +208,7 @@ export const FriendsList: React.FC<FriendsListProps> = ({ onClose }) => {
               <Typography variant="h6" gutterBottom>
                 トレーニング統計
               </Typography>
-              <WorkoutGraphs userId={selectedFriend} />
+              <WorkoutGraphs userId={selectedProfile?.id} workouts={selectedProfile?.workouts || []} />
             </Box>
           )}
         </DialogContent>

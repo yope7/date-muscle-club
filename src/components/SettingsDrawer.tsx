@@ -54,7 +54,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   open,
   onClose,
 }) => {
-  const { user } = useAuth();
+  const { user, isGuest, signOut } = useAuth();
   const { profile, updateProfile } = useUserStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
@@ -81,6 +81,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   };
 
   const handleInviteOpen = () => {
+    if (isGuest) {
+      alert("ゲストユーザーは招待機能を利用できません。");
+      return;
+    }
     setInviteOpen(true);
   };
 
@@ -89,6 +93,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   };
 
   const handleFriendsOpen = () => {
+    if (isGuest) {
+      alert("ゲストユーザーは友達機能を利用できません。");
+      return;
+    }
     setFriendsOpen(true);
   };
 
@@ -97,6 +105,10 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   };
 
   const handleInviteListOpen = () => {
+    if (isGuest) {
+      alert("ゲストユーザーは招待機能を利用できません。");
+      return;
+    }
     setInviteListOpen(true);
   };
 

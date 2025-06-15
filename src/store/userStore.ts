@@ -11,7 +11,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import { WorkoutRecord } from "@/types/workout";
 
 interface UserState {
   profile: UserProfile | null;
@@ -43,7 +44,8 @@ export const useUserStore = create<UserState>((set, get) => ({
         const data = userDoc.data();
         const profile: UserProfile = {
           id: userId,
-          username: data.username || "",
+          displayName: data.displayName || "",
+          username: data.displayName || "",
           email: data.email || "",
           photoURL: data.photoURL,
         };
@@ -76,11 +78,31 @@ export const useUserStore = create<UserState>((set, get) => ({
         const friendDoc = await getDoc(doc(db, "users", friendId));
         if (friendDoc.exists()) {
           const friendData = friendDoc.data();
+          
+          // 友達のワークアウトデータを取得
+          const workoutsQuery = query(
+            collection(db, "users", friendId, "workouts"),
+            orderBy("date", "desc"),
+            limit(30)
+          );
+          const workoutsSnapshot = await getDocs(workoutsQuery);
+          const workouts = workoutsSnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+            date: doc.data().date,
+          })) as WorkoutRecord[];
+
+          // Googleアカウントの情報を取得
+          const authDoc = await getDoc(doc(db, "auth", friendId));
+          const authData = authDoc.exists() ? authDoc.data() : null;
+
           const profile: UserProfile = {
             id: friendId,
-            username: friendData.username || "",
+            displayName: authData?.displayName || friendData.displayName || "",
+            username: authData?.displayName || friendData.displayName || "",
             email: friendData.email || "",
-            photoURL: friendData.photoURL,
+            photoURL: authData?.photoURL || friendData.photoURL,
+            workouts,
           };
           friends.push(profile);
           get().setProfileById(friendId, profile);

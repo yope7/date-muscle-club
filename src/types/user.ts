@@ -1,3 +1,5 @@
+import { WorkoutRecord } from "./workout";
+
 export interface UserProfile {
   id: string;
   displayName?: string;
@@ -6,4 +8,5 @@ export interface UserProfile {
   email: string;
   createdAt?: Date;
   updatedAt?: Date;
+  workouts?: WorkoutRecord[];
 }
