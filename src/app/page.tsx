@@ -60,6 +60,7 @@ import { useUserStore } from "@/store/userStore";
 import { SettingsDrawer } from "@/components/SettingsDrawer";
 import { MyPage } from "@/components/MyPage";
 import { useSwipeable } from "react-swipeable";
+import { LoginForm } from "@/components/LoginForm";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -84,7 +85,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export default function Home() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, isGuest, signInWithGoogle } = useAuth();
   const { workouts, fetchWorkouts, selectedDate } = useWorkoutStore();
   const { isDrawerOpen } = useDrawerStore();
   const [loading, setLoading] = useState(true);
@@ -186,10 +187,15 @@ export default function Home() {
 
   if (!user) {
     return (
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          ログインが必要です
-        </Typography>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "100vh",
+          bgcolor: "background.default",
+        }}
+      >
+        <LoginForm />
       </Box>
     );
   }
@@ -221,6 +227,11 @@ export default function Home() {
         touchAction: "pan-x pan-y",
       }}
     >
+      {isGuest && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          ゲストログイン中です。記録は保存されません。
+        </Alert>
+      )}
       <SettingsDrawer open={isDrawerOpen} onClose={() => {}} />
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs
@@ -246,7 +257,7 @@ export default function Home() {
         flex: 1,
         display: "flex",
         flexDirection: "column",
-        minHeight: "calc(100vh - 48px)", // タブバーの高さを考慮
+        minHeight: "calc(100vh - 48px)",
       }}>
         {value === 0 && (
           <Box sx={{ p: 2, flex: 1 }}>
@@ -255,19 +266,57 @@ export default function Home() {
         )}
         {value === 1 && (
           <Box sx={{ p: 2, flex: 1 }}>
-            <Feed
-              workouts={workouts}
-              onRefresh={async () => {
-                if (user) {
-                  await fetchWorkouts(user.uid);
-                }
-              }}
-            />
+            {isGuest ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                  ログインが必要です
+                </Typography>
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  フレンドの投稿を見るにはログインしてください
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => signInWithGoogle()}
+                  sx={{ mt: 2 }}
+                >
+                  Googleでログイン
+                </Button>
+              </Box>
+            ) : (
+              <Feed
+                workouts={workouts}
+                onRefresh={async () => {
+                  if (user) {
+                    await fetchWorkouts(user.uid);
+                  }
+                }}
+              />
+            )}
           </Box>
         )}
         {value === 2 && (
           <Box sx={{ p: 2, flex: 1 }}>
-            <MyPage />
+            {isGuest ? (
+              <Box sx={{ textAlign: "center", py: 4 }}>
+                <Typography variant="h6" gutterBottom>
+                  ログインが必要です
+                </Typography>
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  マイページを利用するにはログインしてください
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => signInWithGoogle()}
+                  sx={{ mt: 2 }}
+                >
+                  Googleでログイン
+                </Button>
+              </Box>
+            ) : (
+              <MyPage />
+            )}
           </Box>
         )}
       </Box>

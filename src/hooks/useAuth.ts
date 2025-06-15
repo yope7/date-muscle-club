@@ -11,11 +11,14 @@ import {
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { create } from "zustand";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface AuthState {
   user: User | null;
   loading: boolean;
   error: string | null;
+  isGuest: boolean;
   signInWithGoogle: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -27,11 +30,40 @@ const useAuthStore = create<AuthState>((set) => ({
   user: null,
   loading: true,
   error: null,
+  isGuest: false,
   signInWithGoogle: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, isGuest: false });
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Firestoreにユーザー情報を保存
+      const userRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        // 新規ユーザーの場合
+        await setDoc(userRef, {
+          id: user.uid,
+          displayName: user.displayName,
+          username: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          friends: [],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        // 既存ユーザーの場合、プロフィール情報を更新
+        await updateDoc(userRef, {
+          displayName: user.displayName,
+          username: user.displayName,
+          email: user.email,
+          photoURL: user.photoURL,
+          updatedAt: serverTimestamp(),
+        });
+      }
     } catch (error: any) {
       console.error("Error signing in with Google:", error);
       if (error.code === "auth/popup-closed-by-user") {
@@ -49,7 +81,7 @@ const useAuthStore = create<AuthState>((set) => ({
     }
   },
   signInAsGuest: async () => {
-    set({ loading: true, error: null });
+    set({ loading: true, error: null, isGuest: true });
     try {
       await signInAnonymously(auth);
     } catch (error) {
