@@ -566,32 +566,37 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const handleLike = async (workoutId: string) => {
     if (!user) return;
 
-    if (likes[workoutId]) {
-      // いいねを削除
-      const likesQuery = query(
-        collection(db, "likes"),
-        where("workoutId", "==", workoutId),
-        where("userId", "==", user.uid)
-      );
-      const snapshot = await getDocs(likesQuery);
-      snapshot.forEach(async (doc) => {
-        await deleteDoc(doc.ref);
-      });
-    } else {
-      // いいねを追加
-      await addDoc(collection(db, "likes"), {
-        workoutId,
-        userId: user.uid,
-        createdAt: new Date(),
-        user: {
-          displayName:
-            profile?.username ||
-            user.displayName ||
-            user.email?.split("@")[0] ||
-            "ユーザー",
-          photoURL: profile?.photoURL || user.photoURL,
-        },
-      });
+    try {
+      // ユーザーのプロフィール情報を取得
+      const userRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userRef);
+      const userData = userDoc.exists() ? userDoc.data() : null;
+
+      if (likes[workoutId]) {
+        // いいねを削除
+        const likesQuery = query(
+          collection(db, "likes"),
+          where("workoutId", "==", workoutId),
+          where("userId", "==", user.uid)
+        );
+        const snapshot = await getDocs(likesQuery);
+        snapshot.forEach(async (doc) => {
+          await deleteDoc(doc.ref);
+        });
+      } else {
+        // いいねを追加
+        await addDoc(collection(db, "likes"), {
+          workoutId,
+          userId: user.uid,
+          createdAt: new Date(),
+          user: {
+            displayName: userData?.displayName || user.displayName || user.email?.split("@")[0] || "ユーザー",
+            photoURL: userData?.photoURL || user.photoURL,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("いいねの操作に失敗しました:", error);
     }
   };
 
@@ -632,6 +637,11 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     if (!user || !selectedWorkout || !newComment.trim()) return;
 
     try {
+      // ユーザーのプロフィール情報を取得
+      const userRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userRef);
+      const userData = userDoc.exists() ? userDoc.data() : null;
+
       // ユーザーのコメントを投稿
       await addDoc(collection(db, "comments"), {
         workoutId: selectedWorkout,
@@ -639,12 +649,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         content: newComment.trim(),
         createdAt: new Date(),
         user: {
-          displayName:
-            profile?.username ||
-            user.displayName ||
-            user.email?.split("@")[0] ||
-            "ユーザー",
-          photoURL: profile?.photoURL || user.photoURL,
+          displayName: userData?.displayName || user.displayName || user.email?.split("@")[0] || "ユーザー",
+          photoURL: userData?.photoURL || user.photoURL,
         },
       });
 
@@ -1076,7 +1082,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                 }}
                               >
                                 <ListItemAvatar>
-                                  <Avatar
+                                  {systemUser ? (
+                                    <Avatar
                                     sx={{
                                       width: 24,
                                       height: 24,
@@ -1085,10 +1092,16 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                   >
                                     {systemUser?.icon || "?"}
                                   </Avatar>
+                                  ) : (
+                                    <Avatar
+                                      src={comment.user.photoURL}
+                                      sx={{ width: 24, height: 24 }}
+                                    />
+                                  )}
                                 </ListItemAvatar>
                                 <Box>
                                   <Typography variant="body2">
-                                    {systemUser?.displayName || "不明なユーザー"}
+                                    {systemUser?.displayName || comment.user.displayName || "不明なユーザー"}
                                   </Typography>
                                   <Typography variant="caption" color="text.secondary">
                                     {comment.content}
