@@ -58,6 +58,9 @@ import {
   getDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { WorkoutGraphs } from "./WorkoutGraphs";
+import { WorkoutStats } from "./WorkoutStats";
+import { WorkoutHistory } from "./WorkoutHistory";
 
 interface FeedProps {
   workouts: WorkoutRecord[];
@@ -195,6 +198,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const [selectedWorkout, setSelectedWorkout] = useState<string | null>(null);
   const [newComment, setNewComment] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
 
   // workoutsとfriendWorkoutsの変更を監視してキャッシュを更新
   useEffect(() => {
@@ -813,6 +818,16 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     );
   };
 
+  const handleProfileClick = (userId: string) => {
+    setSelectedProfile(userId);
+    setProfileDialogOpen(true);
+  };
+
+  const handleProfileClose = () => {
+    setProfileDialogOpen(false);
+    setSelectedProfile(null);
+  };
+
   if (isLoadingWorkouts) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
@@ -946,9 +961,12 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                       }}
                     >
                       <ListItemAvatar>
-                        <Avatar src={userInfo?.photoURL || undefined}>
-                          {userInfo?.displayName?.charAt(0).toUpperCase() ||
-                            "?"}
+                        <Avatar
+                          src={userInfo?.photoURL || undefined}
+                          onClick={() => handleProfileClick(workout.userId)}
+                          sx={{ cursor: "pointer" }}
+                        >
+                          {userInfo?.displayName?.charAt(0).toUpperCase() || "?"}
                         </Avatar>
                       </ListItemAvatar>
                       <Box sx={{ flex: 1 }}>
@@ -1084,18 +1102,19 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                 <ListItemAvatar>
                                   {systemUser ? (
                                     <Avatar
-                                    sx={{
-                                      width: 24,
-                                      height: 24,
-                                      bgcolor: systemUser ? "primary.main" : "grey.500",
-                                    }}
-                                  >
-                                    {systemUser?.icon || "?"}
-                                  </Avatar>
+                                      sx={{
+                                        width: 24,
+                                        height: 24,
+                                        bgcolor: "primary.main",
+                                      }}
+                                    >
+                                      {systemUser.icon}
+                                    </Avatar>
                                   ) : (
                                     <Avatar
                                       src={comment.user.photoURL}
-                                      sx={{ width: 24, height: 24 }}
+                                      sx={{ width: 24, height: 24, cursor: "pointer" }}
+                                      onClick={() => handleProfileClick(comment.userId)}
                                     />
                                   )}
                                 </ListItemAvatar>
@@ -1136,6 +1155,62 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         <DialogActions>
           <Button onClick={handleCommentClose}>キャンセル</Button>
           <Button onClick={handleCommentSubmit}>投稿</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={profileDialogOpen}
+        onClose={handleProfileClose}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {selectedProfile && (
+              <>
+                <Avatar
+                  src={getUserInfo(selectedProfile)?.photoURL}
+                  sx={{ width: 80, height: 80 }}
+                />
+                <Box>
+                  <Typography variant="h5" gutterBottom>
+                    {getUserInfo(selectedProfile)?.displayName || "不明なユーザー"}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {getUserInfo(selectedProfile)?.email}
+                  </Typography>
+                </Box>
+              </>
+            )}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedProfile && (
+            <Box sx={{ mt: 2 }}>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ flexGrow: 1 }}>
+                <WorkoutStats
+                  workouts={allWorkouts.filter(
+                    (workout) => workout.userId === selectedProfile
+                  )}
+                />
+                <WorkoutGraphs
+                  workouts={allWorkouts.filter(
+                    (workout) => workout.userId === selectedProfile
+                  )}
+                  userId={selectedProfile}
+                />
+                <WorkoutHistory
+                  workouts={allWorkouts.filter(
+                    (workout) => workout.userId === selectedProfile
+                  )}
+                />
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleProfileClose}>閉じる</Button>
         </DialogActions>
       </Dialog>
     </>
