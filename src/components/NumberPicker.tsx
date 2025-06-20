@@ -3,21 +3,25 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Box, Typography, useTheme, useMediaQuery } from "@mui/material";
 
-interface WeightPickerProps {
+interface NumberPickerProps {
   value: number;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
   step?: number;
+  unit?: string;
+  allowEmpty?: boolean;
 }
 
-export const WeightPicker = ({
+export const NumberPicker = ({
   value,
   onChange,
-  min = 25,
+  min = 0,
   max = 150,
-  step = 2.5,
-}: WeightPickerProps) => {
+  step = 0.5,
+  unit = "kg",
+  allowEmpty = false,
+}: NumberPickerProps) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isDragging, setIsDragging] = useState(false);
@@ -25,23 +29,30 @@ export const WeightPicker = ({
   const [startValue, setStartValue] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 重量の選択肢を生成
-  const weights = Array.from(
-    { length: Math.floor((max - min) / step) + 1 },
-    (_, i) => min + i * step
-  );
+  // 数値の選択肢を生成
+  // 少数は1桁まで
+  const numbers = allowEmpty
+    ? [
+        0,
+        ...Array.from({ length: Math.floor((max - min) / step) + 1 }, (_, i) =>
+          parseFloat((min + i * step).toFixed(1))
+        ),
+      ]
+    : Array.from({ length: Math.floor((max - min) / step) + 1 }, (_, i) =>
+        parseFloat((min + i * step).toFixed(1))
+      );
 
   // 現在の値のインデックスを取得（最も近い値を使用）
   const getCurrentIndex = (val: number) => {
-    return weights.findIndex((w) => w >= val) || 0;
+    return numbers.findIndex((n) => n >= val) || 0;
   };
 
   const currentIndex = getCurrentIndex(value);
 
-  // 表示する重量の範囲を計算（現在の値の前後2つずつ）
-  const visibleWeights = weights.slice(
+  // 表示する数値の範囲を計算（現在の値の前後2つずつ）
+  const visibleNumbers = numbers.slice(
     Math.max(0, currentIndex - 2),
-    Math.min(weights.length, currentIndex + 3)
+    Math.min(numbers.length, currentIndex + 3)
   );
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -56,8 +67,10 @@ export const WeightPicker = ({
     const deltaY = startY - e.touches[0].clientY;
     const deltaValue = Math.round(deltaY / 10);
     const rawValue = Math.max(0, startValue + deltaValue);
-    // 2.5kg刻みの最も近い値にスナップ
-    const snappedValue = Math.round(rawValue / step) * step;
+    // ステップ刻みの最も近い値にスナップ
+    const snappedValue = parseFloat(
+      (Math.round(rawValue / step) * step).toFixed(1)
+    );
     onChange(snappedValue);
   };
 
@@ -77,8 +90,10 @@ export const WeightPicker = ({
     const deltaY = startY - e.clientY;
     const deltaValue = Math.round(deltaY / 10);
     const rawValue = Math.max(0, startValue + deltaValue);
-    // 2.5kg刻みの最も近い値にスナップ
-    const snappedValue = Math.round(rawValue / step) * step;
+    // ステップ刻みの最も近い値にスナップ
+    const snappedValue = parseFloat(
+      (Math.round(rawValue / step) * step).toFixed(1)
+    );
     onChange(snappedValue);
   };
 
@@ -89,17 +104,17 @@ export const WeightPicker = ({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "ArrowUp") {
       e.preventDefault();
-      const newValue = Math.min(max, value + step);
+      const newValue = parseFloat(Math.min(max, value + step).toFixed(1));
       onChange(newValue);
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      const newValue = Math.max(min, value - step);
+      const newValue = parseFloat(Math.max(min, value - step).toFixed(1));
       onChange(newValue);
     }
   };
 
-  const handleClick = (weight: number) => {
-    onChange(weight);
+  const handleClick = (number: number) => {
+    onChange(number);
   };
 
   useEffect(() => {
@@ -110,8 +125,10 @@ export const WeightPicker = ({
       e.preventDefault();
       const delta = Math.sign(e.deltaY) * -1;
       const rawValue = Math.max(0, value + delta * step);
-      // 2.5kg刻みの最も近い値にスナップ
-      const snappedValue = Math.round(rawValue / step) * step;
+      // ステップ刻みの最も近い値にスナップ
+      const snappedValue = parseFloat(
+        (Math.round(rawValue / step) * step).toFixed(1)
+      );
       onChange(snappedValue);
     };
 
@@ -170,25 +187,25 @@ export const WeightPicker = ({
           py: 1,
         }}
       >
-        {visibleWeights.map((weight) => (
+        {visibleNumbers.map((number) => (
           <Typography
-            key={weight}
+            key={number}
             variant={isMobile ? "h6" : "h5"}
-            onClick={() => handleClick(weight)}
+            onClick={() => handleClick(number)}
             sx={{
               my: 0.5,
-              opacity: weight === value ? 1 : 0.3,
-              transform: `scale(${weight === value ? 1 : 0.8})`,
+              opacity: number === value ? 1 : 0.3,
+              transform: `scale(${number === value ? 1 : 0.8})`,
               transition: "all 0.2s ease",
-              fontWeight: weight === value ? "bold" : "normal",
-              color: weight === value ? theme.palette.primary.main : "inherit",
+              fontWeight: number === value ? "bold" : "normal",
+              color: number === value ? theme.palette.primary.main : "inherit",
               cursor: "pointer",
               "&:hover": {
                 opacity: 0.8,
               },
             }}
           >
-            {weight} kg
+            {number === 0 && allowEmpty ? "選択なし" : `${number}${unit}`}
           </Typography>
         ))}
       </Box>

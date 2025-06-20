@@ -1,9 +1,10 @@
 import { Timestamp } from "firebase/firestore";
 
-export interface WorkoutSet {
+export type WorkoutSet = {
   weight: number;
   reps: number;
-}
+  workoutType?: string;
+};
 
 export interface Workout {
   id: string;
@@ -16,8 +17,10 @@ export interface Workout {
   updatedAt: Date;
 }
 
+export type WorkoutType = "strength" | "cardio";
+
 export type WorkoutRecord = {
-  id: string;
+  id?: string;
   userId: string;
   date: Timestamp;
   sets: WorkoutSet[];
@@ -25,7 +28,8 @@ export type WorkoutRecord = {
   tags: string[];
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  isNewRecord?: boolean;
+  type?: WorkoutType;
+  name: string;
 };
 
 export type User = {

@@ -182,7 +182,7 @@ export default function Home() {
     },
     preventScrollOnSwipe: true,
     trackMouse: true,
-    delta: 50,  // px
+    delta: 50, // px
   });
 
   if (!user) {
@@ -251,14 +251,17 @@ export default function Home() {
           <Tab label="マイページ" />
         </Tabs>
       </Box>
-      <Box {...handlers} sx={{ 
-        overflow: "auto", 
-        touchAction: "pan-x pan-y",
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        minHeight: "calc(100vh - 48px)",
-      }}>
+      <Box
+        {...handlers}
+        sx={{
+          overflow: "auto",
+          touchAction: "pan-x pan-y",
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          minHeight: "calc(100vh - 48px)",
+        }}
+      >
         {value === 0 && (
           <Box sx={{ p: 2, flex: 1 }}>
             <Calendar isDrawerOpen={isDrawerOpen} />
@@ -320,21 +323,6 @@ export default function Home() {
           </Box>
         )}
       </Box>
-
-      <Dialog
-        fullScreen={isMobile}
-        open={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        maxWidth="sm"
-        fullWidth
-        keepMounted={false}
-        disablePortal={false}
-        aria-labelledby="workout-form-title"
-      >
-        <DialogContent sx={{ p: 0 }}>
-          <WorkoutForm onComplete={() => setIsFormOpen(false)} />
-        </DialogContent>
-      </Dialog>
     </Box>
   );
 }

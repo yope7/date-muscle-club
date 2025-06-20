@@ -28,8 +28,14 @@ import {
   Button,
   Snackbar,
   Alert,
+  TextField,
 } from "@mui/material";
-import { ChevronLeft, ChevronRight, Add as AddIcon } from "@mui/icons-material";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Add as AddIcon,
+  ArrowBack,
+} from "@mui/icons-material";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { useSettingsStore } from "@/store/settingsStore";
 import { LocalizationProvider } from "@mui/x-date-pickers";
@@ -41,8 +47,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { WorkoutRecord } from "@/types/workout";
 import { Timestamp } from "firebase/firestore";
 import { WorkoutSets } from "./WorkoutSets";
-import { WeightPicker } from "./WeightPicker";
-import { RepsPicker } from "./RepsPicker";
+import { NumberPicker } from "./NumberPicker";
+import { WorkoutTypeSelector } from "./WorkoutTypeSelector";
+import { WorkoutType } from "@/data/workoutTypes";
 
 interface CalendarProps {
   isDrawerOpen?: boolean;
@@ -65,6 +72,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const [addSetDialogOpen, setAddSetDialogOpen] = useState(false);
   const [newSet, setNewSet] = useState({ weight: 25, reps: 0 });
   const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [workoutTypeSelectorOpen, setWorkoutTypeSelectorOpen] = useState(false);
+  const [selectedWorkoutType, setSelectedWorkoutType] =
+    useState<WorkoutType | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -173,6 +183,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         memo: "",
         createdAt: Timestamp.fromDate(new Date()),
         updatedAt: Timestamp.fromDate(new Date()),
+        name: "ワークアウト",
       };
       setSelectedWorkout(newWorkout);
     }
@@ -186,6 +197,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       {
         weight: newSet.weight,
         reps: newSet.reps,
+        workoutType: selectedWorkoutType?.name || "ベンチプレス",
       },
     ];
 
@@ -193,6 +205,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       ...selectedWorkout,
       sets: updatedSets,
       updatedAt: Timestamp.fromDate(new Date()),
+      name: selectedWorkoutType?.name || "ベンチプレス",
     };
 
     if (selectedWorkout.id) {
@@ -201,14 +214,18 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       await addWorkout(updatedWorkout);
     }
 
-    // 状態を更新
     setSelectedWorkout(updatedWorkout);
-    // スナックバーを表示
     setSnackbarOpen(true);
+    setSelectedWorkoutType(null);
   };
 
   const handleCloseSnackbar = () => {
     setSnackbarOpen(false);
+  };
+
+  const handleWorkoutTypeSelect = (workoutType: WorkoutType) => {
+    setSelectedWorkoutType(workoutType);
+    setAddSetDialogOpen(true);
   };
 
   if (loading) {
@@ -352,45 +369,118 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           <WorkoutSets
             workout={selectedWorkout}
             onDelete={async (workout) => {
-              await useWorkoutStore.getState().deleteWorkout(workout.id);
+              if (workout.id) {
+                await useWorkoutStore.getState().deleteWorkout(workout.id);
+              }
               setSelectedWorkout(null);
             }}
-            onAddSet={() => setAddSetDialogOpen(true)}
+            onAddSet={() => setWorkoutTypeSelectorOpen(true)}
           />
         </Box>
       )}
 
+      <WorkoutTypeSelector
+        open={workoutTypeSelectorOpen}
+        onClose={() => setWorkoutTypeSelectorOpen(false)}
+        onSelect={handleWorkoutTypeSelect}
+      />
+
       <Dialog
         open={addSetDialogOpen}
-        onClose={() => setAddSetDialogOpen(false)}
+        onClose={() => {
+          setAddSetDialogOpen(false);
+          setSelectedWorkoutType(null);
+        }}
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>新しいセットを追加</DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                重量
-              </Typography>
-              <WeightPicker
-                value={newSet.weight}
-                onChange={(value) => setNewSet({ ...newSet, weight: value })}
-              />
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                回数
-              </Typography>
-              <RepsPicker
-                value={newSet.reps}
-                onChange={(value) => setNewSet({ ...newSet, reps: value })}
-              />
-            </Box>
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <IconButton
+              onClick={() => {
+                setAddSetDialogOpen(false);
+                setWorkoutTypeSelectorOpen(true);
+              }}
+              sx={{ mr: 1 }}
+            >
+              <ArrowBack />
+            </IconButton>
+            {selectedWorkoutType
+              ? `${selectedWorkoutType.name}のセットを追加`
+              : "新しいセットを追加"}
           </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedWorkoutType?.id === "running" ? (
+            <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  時間（分）
+                </Typography>
+                <NumberPicker
+                  value={newSet.reps}
+                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
+                  min={0}
+                  max={300}
+                  step={1}
+                  unit="分"
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  距離（km）
+                </Typography>
+                <NumberPicker
+                  value={newSet.weight}
+                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  unit="km"
+                />
+              </Box>
+            </Box>
+          ) : (
+            <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  重量
+                </Typography>
+                <NumberPicker
+                  value={newSet.weight}
+                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
+                  min={0}
+                  max={150}
+                  step={2.5}
+                  unit="kg"
+                  allowEmpty
+                />
+              </Box>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  回数
+                </Typography>
+                <NumberPicker
+                  value={newSet.reps}
+                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
+                  min={0}
+                  max={100}
+                  step={1}
+                  unit="回"
+                />
+              </Box>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddSetDialogOpen(false)}>キャンセル</Button>
+          <Button
+            onClick={() => {
+              setAddSetDialogOpen(false);
+              setSelectedWorkoutType(null);
+            }}
+          >
+            キャンセル
+          </Button>
           <Button onClick={handleAddSet} variant="contained">
             追加
           </Button>
