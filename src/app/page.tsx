@@ -35,7 +35,6 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
-import { WorkoutSets } from "@/components/WorkoutSets";
 import WorkoutForm from "@/components/WorkoutForm";
 import { Calendar } from "@/components/Calendar";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -123,6 +122,7 @@ export default function Home() {
             tags: data.tags || [],
             createdAt: data.createdAt,
             updatedAt: data.updatedAt,
+            name: data.name || "ワークアウト",
           });
         });
         setLocalWorkouts(workoutData);
@@ -156,7 +156,7 @@ export default function Home() {
     : null;
 
   const handleDelete = async (workout: WorkoutRecord) => {
-    if (!user) return;
+    if (!user || !workout.id) return;
     try {
       await deleteDoc(doc(db, "users", user.uid, "workouts", workout.id));
     } catch (error) {

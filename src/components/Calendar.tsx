@@ -70,11 +70,19 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     null
   );
   const [addSetDialogOpen, setAddSetDialogOpen] = useState(false);
-  const [newSet, setNewSet] = useState({ weight: 25, reps: 0 });
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [workoutTypeSelectorOpen, setWorkoutTypeSelectorOpen] = useState(false);
   const [selectedWorkoutType, setSelectedWorkoutType] =
     useState<WorkoutType | null>(null);
+  const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
+
+  // デフォルト値を取得する関数
+  const getDefaultValues = () => {
+    if (selectedWorkoutType?.id === "running") {
+      return { weight: 5, reps: 30 }; // 距離5km、時間30分
+    }
+    return { weight: 25, reps: 10 }; // 重量25kg、回数10回
+  };
 
   useEffect(() => {
     if (!user) {
@@ -195,8 +203,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     const updatedSets = [
       ...selectedWorkout.sets,
       {
-        weight: newSet.weight,
-        reps: newSet.reps,
+        weight: dialogValues.weight,
+        reps: dialogValues.reps,
         workoutType: selectedWorkoutType?.name || "ベンチプレス",
       },
     ];
@@ -216,7 +224,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
     setSelectedWorkout(updatedWorkout);
     setSnackbarOpen(true);
-    setSelectedWorkoutType(null);
   };
 
   const handleCloseSnackbar = () => {
@@ -375,6 +382,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
               setSelectedWorkout(null);
             }}
             onAddSet={() => setWorkoutTypeSelectorOpen(true)}
+            onUpdate={(updatedWorkout) => {
+              setSelectedWorkout(updatedWorkout);
+            }}
           />
         </Box>
       )}
@@ -389,7 +399,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         open={addSetDialogOpen}
         onClose={() => {
           setAddSetDialogOpen(false);
-          setSelectedWorkoutType(null);
         }}
         maxWidth="sm"
         fullWidth
@@ -418,8 +427,10 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   時間（分）
                 </Typography>
                 <NumberPicker
-                  value={newSet.reps}
-                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
+                  value={dialogValues.reps}
+                  onChange={(value) =>
+                    setDialogValues({ ...dialogValues, reps: value })
+                  }
                   min={0}
                   max={300}
                   step={1}
@@ -431,8 +442,10 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   距離（km）
                 </Typography>
                 <NumberPicker
-                  value={newSet.weight}
-                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
+                  value={dialogValues.weight}
+                  onChange={(value) =>
+                    setDialogValues({ ...dialogValues, weight: value })
+                  }
                   min={0}
                   max={100}
                   step={0.1}
@@ -447,8 +460,10 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   重量
                 </Typography>
                 <NumberPicker
-                  value={newSet.weight}
-                  onChange={(value) => setNewSet({ ...newSet, weight: value })}
+                  value={dialogValues.weight}
+                  onChange={(value) =>
+                    setDialogValues({ ...dialogValues, weight: value })
+                  }
                   min={0}
                   max={150}
                   step={2.5}
@@ -461,8 +476,10 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   回数
                 </Typography>
                 <NumberPicker
-                  value={newSet.reps}
-                  onChange={(value) => setNewSet({ ...newSet, reps: value })}
+                  value={dialogValues.reps}
+                  onChange={(value) =>
+                    setDialogValues({ ...dialogValues, reps: value })
+                  }
                   min={0}
                   max={100}
                   step={1}
@@ -476,7 +493,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           <Button
             onClick={() => {
               setAddSetDialogOpen(false);
-              setSelectedWorkoutType(null);
             }}
           >
             キャンセル

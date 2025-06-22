@@ -28,12 +28,14 @@ interface WorkoutSetsProps {
   workout: WorkoutRecord;
   onDelete?: (workout: WorkoutRecord) => void;
   onAddSet?: () => void;
+  onUpdate?: (updatedWorkout: WorkoutRecord) => void;
 }
 
 export const WorkoutSets = ({
   workout,
   onDelete,
   onAddSet,
+  onUpdate,
 }: WorkoutSetsProps) => {
   const { updateWorkout, addWorkout } = useWorkoutStore();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -50,23 +52,23 @@ export const WorkoutSets = ({
   const workoutDate = workout.date.toDate();
 
   // ワークアウトタイプの情報を取得
-  console.log("Current workout name:", workout.name);
-  console.log("Workout sets:", workout.sets);
+  // console.log("Current workout name:", workout.name);
+  // console.log("Workout sets:", workout.sets);
   const workoutTypeInfo = workoutTypes.find(
     (type) => type.name === workout.name
   );
-  console.log("Found workout type:", workoutTypeInfo);
+  // console.log("Found workout type:", workoutTypeInfo);
   const muscleGroupInfo = workoutTypeInfo
     ? muscleGroups.find((group) => group.id === workoutTypeInfo.muscleGroupId)
     : null;
-  console.log("Found muscle group:", muscleGroupInfo);
+  // console.log("Found muscle group:", muscleGroupInfo);
 
   // ワークアウトタイプごとにセットをグループ化
   const groupedSets = workout.sets.reduce((acc, set, index) => {
     // セットのworkoutTypeを使用してグループ化
     const type =
       set.workoutType || workoutTypeInfo?.muscleGroupId || "strength";
-    console.log("Grouping set with type:", type, "for set:", set);
+    // console.log("Grouping set with type:", type, "for set:", set);
     if (!acc[type]) {
       acc[type] = [];
     }
@@ -90,10 +92,15 @@ export const WorkoutSets = ({
       sets: updatedSets,
       updatedAt: Timestamp.fromDate(new Date()),
     };
-
+    // console.log("削除を実行");
+    // console.log("削除対象：", setToDelete);
+    // console.log("更新されたセット：", updatedSets);
     await updateWorkout(updatedWorkout);
     setDeleteDialogOpen(false);
     setSetToDelete(null);
+    if (onUpdate) {
+      onUpdate(updatedWorkout);
+    }
   };
 
   const handleDeleteWorkout = () => {
@@ -153,13 +160,6 @@ export const WorkoutSets = ({
             <Typography variant="caption" color="text.secondary">
               {format(workoutDate, "M月d日 (E)", { locale: ja })}
             </Typography>
-            <Stack direction="row" spacing={1} alignItems="center">
-              {muscleGroupInfo && (
-                <Typography variant="body2" color="text.secondary">
-                  {muscleGroupInfo.icon} {muscleGroupInfo.name}
-                </Typography>
-              )}
-            </Stack>
           </Box>
           <Stack direction="row" spacing={1}>
             <IconButton

@@ -26,6 +26,7 @@ const convertWorkoutData = (
   return {
     id: doc.id,
     userId: data.userId,
+    name: data.name,
     date: data.date,
     sets: data.sets,
     memo: data.memo || "",
@@ -91,9 +92,13 @@ export const addWorkout = async (
 
 // ワークアウトデータの更新
 export const updateWorkout = async (workout: WorkoutRecord): Promise<void> => {
+  if (!workout.id) {
+    throw new Error("Workout ID is missing");
+  }
   try {
     const workoutRef = doc(db, "users", workout.userId, "workouts", workout.id);
     await updateDoc(workoutRef, {
+      name: workout.name,
       sets: workout.sets,
       memo: workout.memo,
       tags: workout.tags,
@@ -163,11 +168,12 @@ export const addTestWorkout = async (userId: string): Promise<string> => {
     const workoutData: WorkoutRecord = {
       id: crypto.randomUUID(),
       userId,
+      name: "テストワークアウト",
       date: Timestamp.fromDate(new Date()),
       sets: [
-        { weight: 60, reps: 10 },
-        { weight: 70, reps: 8 },
-        { weight: 80, reps: 5 },
+        { weight: 60, reps: 10, workoutType: "テスト" },
+        { weight: 70, reps: 8, workoutType: "テスト" },
+        { weight: 80, reps: 5, workoutType: "テスト" },
       ],
       memo: "テスト記録",
       tags: ["テスト"],

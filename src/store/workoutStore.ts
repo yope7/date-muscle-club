@@ -71,6 +71,7 @@ export const useWorkoutStore = create<WorkoutState>()(
                 workoutData.push({
                   id: doc.id,
                   userId: data.userId,
+                  name: data.name,
                   date: data.date,
                   sets: data.sets,
                   memo: data.memo || "",
@@ -120,6 +121,7 @@ export const useWorkoutStore = create<WorkoutState>()(
               workouts.push({
                 id: doc.id,
                 userId: friendId,
+                name: data.name,
                 date: data.date,
                 sets: data.sets,
                 memo: data.memo || "",
