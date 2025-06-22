@@ -60,10 +60,16 @@ export const addWorkout = async (
 
     if (existingWorkout) {
       // 既存のワークアウトがある場合は更新
+      const newSet = workout.sets[workout.sets.length - 1];
+      const newSetWithId: WorkoutSet = {
+        ...newSet,
+        id: newSet.id || crypto.randomUUID(), // 新しいセットにIDがなければ付与
+      };
+
       const updatedWorkout: WorkoutRecord = {
         ...existingWorkout,
-        // 最後の1セットだけを追加
-        sets: [...existingWorkout.sets, workout.sets[workout.sets.length - 1]],
+        // 既存のセットと、IDを付与した新しいセットをマージ
+        sets: [...existingWorkout.sets, newSetWithId],
         memo: workout.memo || existingWorkout.memo,
         tags: [...new Set([...existingWorkout.tags, ...workout.tags])],
         updatedAt: Timestamp.fromDate(new Date()),
@@ -72,15 +78,24 @@ export const addWorkout = async (
       return updatedWorkout;
     } else {
       // 新規作成
+      const setsWithIds = workout.sets.map(
+        (set) =>
+          ({
+            ...set,
+            id: set.id || crypto.randomUUID(), // 各セットにIDがなければ付与
+          } as WorkoutSet)
+      );
+      const workoutWithSetIds = { ...workout, sets: setsWithIds };
+
       const workoutsRef = collection(db, "users", workout.userId, "workouts");
       const docRef = await addDoc(workoutsRef, {
-        ...workout,
+        ...workoutWithSetIds,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
       return {
-        ...workout,
+        ...workoutWithSetIds,
         id: docRef.id,
       };
     }

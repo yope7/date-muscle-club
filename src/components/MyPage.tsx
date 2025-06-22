@@ -40,6 +40,7 @@ export const MyPage: React.FC = () => {
           </Box>
         </Box>
         <Divider sx={{ my: 2 }} />
+
         <Box sx={{ flexGrow: 1 }}>
           <WorkoutStats workouts={workouts} />
           <WorkoutGraphs workouts={workouts} />

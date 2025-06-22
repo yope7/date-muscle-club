@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -11,6 +11,8 @@ import {
   CardContent,
   CardHeader,
   Divider,
+  Chip,
+  Stack,
 } from "@mui/material";
 import {
   LineChart,
@@ -21,6 +23,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  BarChart,
+  Bar,
 } from "recharts";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -33,6 +37,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
+import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 
 interface WorkoutGraphsProps {
   userId?: string;
@@ -61,12 +66,88 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }) => {
+export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
+  userId,
+  workouts,
+}) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [workoutData, setWorkoutData] = useState<any[]>([]);
   const [tabValue, setTabValue] = useState(0);
+  const [selectedWorkoutType, setSelectedWorkoutType] = useState<string | null>(
+    null
+  );
+
+  // よく行うワークアウトタイプを取得
+  const frequentWorkoutTypes = useMemo(() => {
+    const typeCounts = workouts.reduce((acc, workout) => {
+      const type = workout.name || "不明";
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const sortedTypes = Object.entries(typeCounts)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 5); // 上位5つを表示
+
+    return sortedTypes.map(([type, count]) => {
+      const workoutType = workoutTypes.find((wt) => wt.name === type);
+      const muscleGroup = workoutType
+        ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
+        : null;
+
+      return {
+        name: type,
+        count,
+        icon: workoutType?.icon || "🏋️",
+        muscleGroup: muscleGroup?.name || "不明",
+      };
+    });
+  }, [workouts]);
+
+  // 選択されたワークアウトタイプの情報を取得
+  const selectedWorkoutTypeInfo = useMemo(() => {
+    if (!selectedWorkoutType) return null;
+
+    const workoutType = workoutTypes.find(
+      (wt) => wt.name === selectedWorkoutType
+    );
+    const muscleGroup = workoutType
+      ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
+      : null;
+
+    return {
+      name: selectedWorkoutType,
+      icon: workoutType?.icon || "🏋️",
+      muscleGroup: muscleGroup?.name || "不明",
+    };
+  }, [selectedWorkoutType]);
+
+  // ワークアウトタイプ別の分析
+  const workoutTypeAnalysis = useMemo(() => {
+    const typeCounts = workouts.reduce((acc, workout) => {
+      const type = workout.name || "不明";
+      acc[type] = (acc[type] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return Object.entries(typeCounts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([type, count]) => {
+        const workoutType = workoutTypes.find((wt) => wt.name === type);
+        const muscleGroup = workoutType
+          ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
+          : null;
+
+        return {
+          name: type,
+          count,
+          icon: workoutType?.icon || "🏋️",
+          muscleGroup: muscleGroup?.name || "不明",
+        };
+      });
+  }, [workouts]);
 
   useEffect(() => {
     if (!user) {
@@ -97,6 +178,11 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }
               maxWeight: Math.max(
                 ...workout.sets.map((set: any) => set.weight)
               ),
+              totalVolume: workout.sets.reduce(
+                (sum: number, set: any) => sum + set.weight * set.reps,
+                0
+              ),
+              workoutType: workout.name || "不明",
             };
           })
           .reverse();
@@ -114,8 +200,26 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }
     return () => unsubscribe();
   }, [user, userId]);
 
+  // フィルタリングされたグラフデータ
+  const filteredWorkoutData = useMemo(() => {
+    if (!selectedWorkoutType) {
+      return workoutData;
+    }
+    return workoutData.filter(
+      (data) => data.workoutType === selectedWorkoutType
+    );
+  }, [workoutData, selectedWorkoutType]);
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+  };
+
+  const handleWorkoutTypeClick = (workoutType: string) => {
+    if (selectedWorkoutType === workoutType) {
+      setSelectedWorkoutType(null); // 同じものをクリックした場合は選択解除
+    } else {
+      setSelectedWorkoutType(workoutType);
+    }
   };
 
   if (loading) {
@@ -147,7 +251,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }
   const renderGraph = (dataKey: string, color: string, name: string) => (
     <Box sx={{ height: 400 }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={workoutData}>
+        <LineChart data={filteredWorkoutData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis
             dataKey="date"
@@ -177,23 +281,95 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }
     </Box>
   );
 
+  const renderWorkoutTypeChart = () => (
+    <Box sx={{ height: 400 }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={workoutTypeAnalysis}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis
+            dataKey="name"
+            tick={{ fontSize: 12 }}
+            angle={-45}
+            textAnchor="end"
+            height={80}
+          />
+          <YAxis tick={{ fontSize: 12 }} />
+          <Tooltip
+            contentStyle={{
+              backgroundColor: "rgba(255, 255, 255, 0.9)",
+              borderRadius: "8px",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            }}
+          />
+          <Legend />
+          <Bar dataKey="count" fill="#8884d8" name="実施回数" />
+        </BarChart>
+      </ResponsiveContainer>
+    </Box>
+  );
+
   return (
     <Card sx={{ mb: 3 }}>
       <CardHeader
         title="トレーニング記録"
         titleTypographyProps={{ variant: "h6" }}
+        action={
+          selectedWorkoutTypeInfo && (
+            <Chip
+              icon={<span>{selectedWorkoutTypeInfo.icon}</span>}
+              label={`${selectedWorkoutTypeInfo.muscleGroup} - ${selectedWorkoutTypeInfo.name}`}
+              color="primary"
+              variant="filled"
+            />
+          )
+        }
       />
       <Divider />
+
+      {/* よく行うワークアウトタイプの一覧 */}
+      <Box sx={{ p: 2, borderBottom: 1, borderColor: "divider" }}>
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+          よく行うワークアウト:
+        </Typography>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          <Chip
+            label="すべて"
+            size="small"
+            variant={selectedWorkoutType === null ? "filled" : "outlined"}
+            color={selectedWorkoutType === null ? "primary" : "default"}
+            onClick={() => setSelectedWorkoutType(null)}
+            sx={{ cursor: "pointer" }}
+          />
+          {frequentWorkoutTypes.map((type) => (
+            <Chip
+              key={type.name}
+              icon={<span>{type.icon}</span>}
+              label={`${type.name} (${type.count}回)`}
+              size="small"
+              variant={
+                selectedWorkoutType === type.name ? "filled" : "outlined"
+              }
+              color={selectedWorkoutType === type.name ? "primary" : "default"}
+              onClick={() => handleWorkoutTypeClick(type.name)}
+              sx={{ cursor: "pointer" }}
+            />
+          ))}
+        </Stack>
+      </Box>
+
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
           aria-label="workout tabs"
-          variant="fullWidth"
+          variant="scrollable"
+          scrollButtons="auto"
         >
           <Tab label="セット数" />
           <Tab label="レップ数" />
           <Tab label="最大重量" />
+          <Tab label="総挙上量" />
+          {workoutTypeAnalysis.length > 1 && <Tab label="ワークアウト別" />}
         </Tabs>
       </Box>
       <TabPanel value={tabValue} index={0}>
@@ -205,6 +381,14 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ userId, workouts }
       <TabPanel value={tabValue} index={2}>
         {renderGraph("maxWeight", "#ff7300", "最大重量")}
       </TabPanel>
+      <TabPanel value={tabValue} index={3}>
+        {renderGraph("totalVolume", "#ffc658", "総挙上量")}
+      </TabPanel>
+      {workoutTypeAnalysis.length > 1 && (
+        <TabPanel value={tabValue} index={4}>
+          {renderWorkoutTypeChart()}
+        </TabPanel>
+      )}
     </Card>
   );
 };

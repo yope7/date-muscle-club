@@ -1,6 +1,7 @@
 import { Timestamp } from "firebase/firestore";
 
 export type WorkoutSet = {
+  id?: string;
   weight: number;
   reps: number;
   workoutType?: string;

@@ -12,13 +12,17 @@ import {
   useTheme,
   useMediaQuery,
   Avatar,
+  Chip,
 } from "@mui/material";
 import {
   Logout as LogoutIcon,
   Settings as SettingsIcon,
   Menu as MenuIcon,
+  AdminPanelSettings as AdminIcon,
 } from "@mui/icons-material";
 import { SettingsDialog } from "./SettingsDialog";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -29,11 +33,32 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      // コンソール出力を削除
-    }
+    const checkAdminStatus = async () => {
+      if (!user) {
+        setIsAdmin(false);
+        return;
+      }
+
+      try {
+        const userDoc = await getDocs(
+          query(collection(db, "users"), where("email", "==", user.email))
+        );
+
+        if (!userDoc.empty) {
+          const userData = userDoc.docs[0].data();
+          setIsAdmin(userData.isAdmin || false);
+        } else {
+          setIsAdmin(false);
+        }
+      } catch (err) {
+        setIsAdmin(false);
+      }
+    };
+
+    checkAdminStatus();
   }, [user]);
 
   return (
@@ -59,6 +84,17 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
           </Link>
           <Box sx={{ flexGrow: 1 }} />
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {isAdmin && (
+              <Link href="/admin" style={{ textDecoration: "none" }}>
+                <Chip
+                  icon={<AdminIcon />}
+                  label="管理者"
+                  color="primary"
+                  variant="filled"
+                  sx={{ cursor: "pointer" }}
+                />
+              </Link>
+            )}
             <IconButton
               color="inherit"
               onClick={() => setIsSettingsOpen(true)}
