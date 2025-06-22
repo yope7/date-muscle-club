@@ -86,22 +86,9 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
             {isAdmin && (
               <Link href="/admin" style={{ textDecoration: "none" }}>
-                <Chip
-                  icon={<AdminIcon />}
-                  label="管理者"
-                  color="primary"
-                  variant="filled"
-                  sx={{ cursor: "pointer" }}
-                />
+                <Chip icon={<AdminIcon />} color="primary" variant="filled" />
               </Link>
             )}
-            <IconButton
-              color="inherit"
-              onClick={() => setIsSettingsOpen(true)}
-              aria-label="設定"
-            >
-              {/* <SettingsIcon /> */}
-            </IconButton>
             {user ? (
               <>
                 <IconButton color="inherit" aria-label="マイページ">
