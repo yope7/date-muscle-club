@@ -61,6 +61,7 @@ import { db } from "@/lib/firebase";
 import { WorkoutGraphs } from "./WorkoutGraphs";
 import { WorkoutStats } from "./WorkoutStats";
 import { WorkoutHistory } from "./WorkoutHistory";
+import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 
 interface FeedProps {
   workouts: WorkoutRecord[];
@@ -152,8 +153,12 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(false);
   const [isUpdatingRecords, setIsUpdatingRecords] = useState(false);
   const [cachedWorkouts, setCachedWorkouts] = useState<WorkoutRecord[]>([]);
-  const [cachedLikes, setCachedLikes] = useState<{ [key: string]: boolean }>({});
-  const [cachedLikeCounts, setCachedLikeCounts] = useState<{ [key: string]: number }>({});
+  const [cachedLikes, setCachedLikes] = useState<{ [key: string]: boolean }>(
+    {}
+  );
+  const [cachedLikeCounts, setCachedLikeCounts] = useState<{
+    [key: string]: number;
+  }>({});
   const [cachedLikeUsers, setCachedLikeUsers] = useState<{
     [key: string]: Array<{
       id: string;
@@ -220,7 +225,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     setIsRefreshing(true);
     try {
       // 0.5秒待機
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
       await onRefresh();
       // 更新後にデータをキャッシュに保存
       const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
@@ -249,17 +254,25 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
             const data = doc.data();
             return {
               id: doc.id,
-              ...data,
-              isNewRecord: Boolean(data.isNewRecord),
+              userId: data.userId,
+              name: data.name,
               date: data.date,
               sets: data.sets || [],
-            };
-          }) as WorkoutRecord[];
+              memo: data.memo || "",
+              tags: data.tags || [],
+              createdAt: data.createdAt,
+              updatedAt: data.updatedAt,
+              type: data.type,
+              isNewRecord: Boolean(data.isNewRecord),
+            } as WorkoutRecord;
+          });
 
           // データをキャッシュに保存
-          setCachedWorkouts([...workoutData, ...friendWorkouts].sort(
-            (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
-          ));
+          setCachedWorkouts(
+            [...workoutData, ...friendWorkouts].sort(
+              (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+            )
+          );
         } catch (error) {
           console.error("Error fetching workouts:", error);
         } finally {
@@ -595,7 +608,11 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           userId: user.uid,
           createdAt: new Date(),
           user: {
-            displayName: userData?.displayName || user.displayName || user.email?.split("@")[0] || "ユーザー",
+            displayName:
+              userData?.displayName ||
+              user.displayName ||
+              user.email?.split("@")[0] ||
+              "ユーザー",
             photoURL: userData?.photoURL || user.photoURL,
           },
         });
@@ -613,6 +630,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         displayName:
           profile?.username || user.email?.split("@")[0] || "ユーザー",
         photoURL: profile?.photoURL || user.photoURL || undefined,
+        email: user.email || "",
       };
     }
     const friend = friends.find((friend) => friend.id === userId);
@@ -622,6 +640,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         displayName:
           friend.username || friend.email?.split("@")[0] || "ユーザー",
         photoURL: friend.photoURL,
+        email: friend.email || "",
       };
     }
     return null;
@@ -654,7 +673,11 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         content: newComment.trim(),
         createdAt: new Date(),
         user: {
-          displayName: userData?.displayName || user.displayName || user.email?.split("@")[0] || "ユーザー",
+          displayName:
+            userData?.displayName ||
+            user.displayName ||
+            user.email?.split("@")[0] ||
+            "ユーザー",
           photoURL: userData?.photoURL || user.photoURL,
         },
       });
@@ -795,29 +818,6 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     }
   };
 
-  // バッジの表示部分を修正
-  const renderWorkoutBadge = (workout: WorkoutRecord) => {
-    if (!workout.isNewRecord) return null;
-
-    return (
-      <Box sx={{ mt: 1 }}>
-        <Chip
-          icon={<EmojiEventsIcon />}
-          label="最高記録"
-          color="warning"
-          size="small"
-          sx={{
-            backgroundColor: "warning.main",
-            color: "warning.contrastText",
-            "& .MuiChip-icon": {
-              color: "warning.contrastText",
-            },
-          }}
-        />
-      </Box>
-    );
-  };
-
   const handleProfileClick = (userId: string) => {
     setSelectedProfile(userId);
     setProfileDialogOpen(true);
@@ -826,6 +826,82 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const handleProfileClose = () => {
     setProfileDialogOpen(false);
     setSelectedProfile(null);
+  };
+
+  // ワークアウトタイプ別にセットをグループ化する関数
+  const groupSetsByWorkoutType = (sets: any[]) => {
+    const grouped = sets.reduce((acc, set) => {
+      const workoutType = set.workoutType || "ベンチプレス"; // デフォルト値
+      if (!acc[workoutType]) {
+        acc[workoutType] = [];
+      }
+      acc[workoutType].push(set);
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([type, sets]) => ({
+      type,
+      sets: sets as any[],
+      totalReps: (sets as any[]).reduce((sum, set) => sum + (set.reps || 0), 0),
+      maxWeight: Math.max(...(sets as any[]).map((set) => set.weight || 0)),
+      totalWeight: (sets as any[]).reduce(
+        (sum, set) => sum + (set.weight || 0),
+        0
+      ),
+    }));
+  };
+
+  // ワークアウトタイプの情報を取得
+  const getWorkoutTypeInfo = (typeName: string) => {
+    const workoutType = workoutTypes.find((wt) => wt.name === typeName);
+    if (workoutType) {
+      const muscleGroup = muscleGroups.find(
+        (mg) => mg.id === workoutType.muscleGroupId
+      );
+      return {
+        muscleGroup: muscleGroup?.name || "不明",
+        color: getMuscleGroupColor(workoutType.muscleGroupId),
+      };
+    }
+    return {
+      muscleGroup: "不明",
+      color: "primary.main",
+    };
+  };
+
+  // 筋肉グループ別の色を取得
+  const getMuscleGroupColor = (muscleGroupId: string) => {
+    const colorMap: { [key: string]: string } = {
+      chest: "error.main",
+      back: "info.main",
+      legs: "success.main",
+      abs: "warning.main",
+      arms: "secondary.main",
+      cardio: "primary.main",
+    };
+    return colorMap[muscleGroupId] || "primary.main";
+  };
+
+  // ワークアウトの総合的な統計を計算
+  const calculateWorkoutStats = (workout: WorkoutRecord) => {
+    const groupedSets = groupSetsByWorkoutType(workout.sets || []);
+    const totalSets = workout.sets?.length || 0;
+    const totalReps =
+      workout.sets?.reduce((sum, set) => sum + (set.reps || 0), 0) || 0;
+    const maxWeight = Math.max(
+      ...(workout.sets?.map((set) => set.weight || 0) || [0])
+    );
+    const totalWeight =
+      workout.sets?.reduce((sum, set) => sum + (set.weight || 0), 0) || 0;
+
+    return {
+      groupedSets,
+      totalSets,
+      totalReps,
+      maxWeight,
+      totalWeight,
+      workoutTypes: groupedSets.length,
+    };
   };
 
   if (isLoadingWorkouts) {
@@ -966,7 +1042,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                           onClick={() => handleProfileClick(workout.userId)}
                           sx={{ cursor: "pointer" }}
                         >
-                          {userInfo?.displayName?.charAt(0).toUpperCase() || "?"}
+                          {userInfo?.displayName?.charAt(0).toUpperCase() ||
+                            "?"}
                         </Avatar>
                       </ListItemAvatar>
                       <Box sx={{ flex: 1 }}>
@@ -998,27 +1075,185 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                     </Box>
 
                     <Box sx={{ width: "100%", mb: 2 }}>
-                      <Typography variant="body1" sx={{ mb: 1 }}>
-                        ベンチプレス{" "}
-                        {workout.sets?.reduce(
-                          (sum, set) => sum + (set.reps || 0),
-                          0
-                        )}
-                        回
-                      </Typography>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        alignItems="center"
-                        sx={{ mb: 1 }}
-                      >
-                        {workout.sets?.map((set, setIndex) => (
-                          <Chip
-                            key={setIndex}
-                            label={`${set.weight}kg × ${set.reps}回`}
-                          />
-                        ))}
-                      </Stack>
+                      {(() => {
+                        const stats = calculateWorkoutStats(workout);
+
+                        return (
+                          <Box>
+                            {/* ワークアウト概要 */}
+                            <Box sx={{ mb: 2 }}>
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                alignItems="center"
+                                sx={{ mb: 1 }}
+                              >
+                                <Chip
+                                  label={`${stats.workoutTypes}種目`}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                />
+                                <Chip
+                                  label={`${stats.totalSets}セット`}
+                                  size="small"
+                                  color="secondary"
+                                  variant="outlined"
+                                />
+                              </Stack>
+                            </Box>
+
+                            {/* ワークアウトタイプ別の詳細 */}
+                            {stats.groupedSets.map((group, groupIndex) => {
+                              const typeInfo = getWorkoutTypeInfo(group.type);
+                              return (
+                                <Box
+                                  key={groupIndex}
+                                  sx={{
+                                    mb: 2,
+                                    p: 2,
+                                    borderRadius: 2,
+                                    border: `1px solid`,
+                                    borderColor: `${typeInfo.color}20`,
+                                    bgcolor: `${typeInfo.color}08`,
+                                    position: "relative",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  {/* 背景装飾 */}
+                                  <Box
+                                    sx={{
+                                      position: "absolute",
+                                      top: -10,
+                                      right: -10,
+                                      fontSize: "3rem",
+                                      opacity: 0.1,
+                                      color: typeInfo.color,
+                                    }}
+                                  >
+                                    {typeInfo.icon}
+                                  </Box>
+
+                                  {/* ヘッダー */}
+                                  <Box
+                                    sx={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      mb: 1,
+                                    }}
+                                  >
+                                    <Typography
+                                      variant="h6"
+                                      sx={{
+                                        fontSize: "1.1rem",
+                                        fontWeight: "bold",
+                                        color: typeInfo.color,
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 1,
+                                      }}
+                                    >
+                                      <span style={{ fontSize: "1.5rem" }}>
+                                        {typeInfo.icon}
+                                      </span>
+                                      {group.type}
+                                    </Typography>
+                                    <Chip
+                                      label={typeInfo.muscleGroup}
+                                      size="small"
+                                      sx={{
+                                        ml: 1,
+                                        bgcolor: `${typeInfo.color}20`,
+                                        color: typeInfo.color,
+                                        fontWeight: "bold",
+                                      }}
+                                    />
+                                  </Box>
+
+                                  {/* 統計情報 */}
+                                  <Stack
+                                    direction="row"
+                                    spacing={1}
+                                    sx={{ mb: 1 }}
+                                  >
+                                    <Chip
+                                      label={`${group.sets.length}セット`}
+                                      size="small"
+                                      variant="outlined"
+                                    />
+                                    <Chip
+                                      label={`${group.totalReps}回`}
+                                      size="small"
+                                      variant="outlined"
+                                    />
+                                    {group.maxWeight > 0 && (
+                                      <Chip
+                                        label={`最大${group.maxWeight}kg`}
+                                        size="small"
+                                        variant="outlined"
+                                        color="warning"
+                                      />
+                                    )}
+                                  </Stack>
+
+                                  {/* セット詳細 */}
+                                  <Box>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                      sx={{ mb: 1, display: "block" }}
+                                    >
+                                      セット詳細:
+                                    </Typography>
+                                    <Stack
+                                      direction="row"
+                                      spacing={1}
+                                      flexWrap="wrap"
+                                      useFlexGap
+                                    >
+                                      {group.sets.map((set, setIndex) => (
+                                        <Chip
+                                          key={setIndex}
+                                          label={`${set.weight}kg × ${set.reps}回`}
+                                          size="small"
+                                          sx={{
+                                            bgcolor: "background.paper",
+                                            border: `1px solid ${typeInfo.color}40`,
+                                            color: "text.primary",
+                                            fontWeight: "medium",
+                                            "&:hover": {
+                                              bgcolor: `${typeInfo.color}10`,
+                                            },
+                                          }}
+                                        />
+                                      ))}
+                                    </Stack>
+                                  </Box>
+                                </Box>
+                              );
+                            })}
+
+                            {/* メモがある場合 */}
+                            {/* {workout.memo && (
+                              <Box
+                                sx={{
+                                  mt: 2,
+                                  p: 2,
+                                  bgcolor: "grey.50",
+                                  borderRadius: 1,
+                                }}
+                              >
+                                <Typography
+                                  variant="body2"
+                                  color="text.secondary"
+                                >
+                                  💭 {workout.memo}
+                                </Typography>
+                              </Box>
+                            )} */}
+                          </Box>
+                        );
+                      })()}
                     </Box>
 
                     <Box
@@ -1075,7 +1310,10 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                             />
                           ))}
                           {interactions.likeUsers.length > 3 && (
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               他{interactions.likeUsers.length - 3}人
                             </Typography>
                           )}
@@ -1113,16 +1351,27 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                   ) : (
                                     <Avatar
                                       src={comment.user.photoURL}
-                                      sx={{ width: 24, height: 24, cursor: "pointer" }}
-                                      onClick={() => handleProfileClick(comment.userId)}
+                                      sx={{
+                                        width: 24,
+                                        height: 24,
+                                        cursor: "pointer",
+                                      }}
+                                      onClick={() =>
+                                        handleProfileClick(comment.userId)
+                                      }
                                     />
                                   )}
                                 </ListItemAvatar>
                                 <Box>
                                   <Typography variant="body2">
-                                    {systemUser?.displayName || comment.user.displayName || "不明なユーザー"}
+                                    {systemUser?.displayName ||
+                                      comment.user.displayName ||
+                                      "不明なユーザー"}
                                   </Typography>
-                                  <Typography variant="caption" color="text.secondary">
+                                  <Typography
+                                    variant="caption"
+                                    color="text.secondary"
+                                  >
                                     {comment.content}
                                   </Typography>
                                 </Box>
@@ -1174,7 +1423,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                 />
                 <Box>
                   <Typography variant="h5" gutterBottom>
-                    {getUserInfo(selectedProfile)?.displayName || "不明なユーザー"}
+                    {getUserInfo(selectedProfile)?.displayName ||
+                      "不明なユーザー"}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     {getUserInfo(selectedProfile)?.email}

@@ -21,8 +21,9 @@ export interface Workout {
 export type WorkoutType = "strength" | "cardio";
 
 export type WorkoutRecord = {
-  id?: string;
+  id: string;
   userId: string;
+  name?: string;
   date: Timestamp;
   sets: WorkoutSet[];
   memo?: string;
@@ -30,7 +31,7 @@ export type WorkoutRecord = {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   type?: WorkoutType;
-  name: string;
+  isNewRecord?: boolean;
 };
 
 export type User = {
