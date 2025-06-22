@@ -41,25 +41,28 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
   // よく行うワークアウトタイプを取得
   const frequentWorkoutTypes = useMemo(() => {
     const typeCounts = workouts.reduce((acc, workout) => {
-      const type = workout.name || "不明";
-      acc[type] = (acc[type] || 0) + 1;
+      const workoutTypesInSets =
+        workout.sets
+          ?.map((set) => set.workoutType)
+          .filter((type): type is string => Boolean(type)) || [];
+      workoutTypesInSets.forEach((type) => {
+        acc[type] = (acc[type] || 0) + 1;
+      });
       return acc;
     }, {} as Record<string, number>);
 
     const sortedTypes = Object.entries(typeCounts)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 5); // 上位5つを表示
+      .slice(0, 5);
 
     return sortedTypes.map(([type, count]) => {
       const workoutType = workoutTypes.find((wt) => wt.name === type);
       const muscleGroup = workoutType
         ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
         : null;
-
       return {
         name: type,
         count,
-        icon: workoutType?.icon || "🏋️",
         muscleGroup: muscleGroup?.name || "不明",
       };
     });
@@ -68,17 +71,14 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
   // 選択されたワークアウトタイプの情報を取得
   const selectedWorkoutTypeInfo = useMemo(() => {
     if (!selectedWorkoutType) return null;
-
     const workoutType = workoutTypes.find(
       (wt) => wt.name === selectedWorkoutType
     );
     const muscleGroup = workoutType
       ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
       : null;
-
     return {
       name: selectedWorkoutType,
-      icon: workoutType?.icon || "🏋️",
       muscleGroup: muscleGroup?.name || "不明",
     };
   }, [selectedWorkoutType]);
@@ -86,11 +86,15 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
   // ワークアウトタイプ別の分析
   const workoutTypeAnalysis = useMemo(() => {
     const typeCounts = workouts.reduce((acc, workout) => {
-      const type = workout.name || "不明";
-      acc[type] = (acc[type] || 0) + 1;
+      const workoutTypesInSets =
+        workout.sets
+          ?.map((set) => set.workoutType)
+          .filter((type): type is string => Boolean(type)) || [];
+      workoutTypesInSets.forEach((type) => {
+        acc[type] = (acc[type] || 0) + 1;
+      });
       return acc;
     }, {} as Record<string, number>);
-
     return Object.entries(typeCounts)
       .sort(([, a], [, b]) => b - a)
       .map(([type, count]) => {
@@ -98,11 +102,9 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
         const muscleGroup = workoutType
           ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
           : null;
-
         return {
           name: type,
           count,
-          icon: workoutType?.icon || "🏋️",
           muscleGroup: muscleGroup?.name || "不明",
         };
       });
@@ -130,7 +132,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
           <Typography variant="h6">過去のトレーニング記録</Typography>
           {selectedWorkoutTypeInfo && (
             <Chip
-              icon={<span>{selectedWorkoutTypeInfo.icon}</span>}
               label={`${selectedWorkoutTypeInfo.muscleGroup} - ${selectedWorkoutTypeInfo.name}`}
               color="primary"
               variant="filled"
@@ -158,7 +159,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
               {frequentWorkoutTypes.map((type) => (
                 <Chip
                   key={type.name}
-                  icon={<span>{type.icon}</span>}
                   label={`${type.name} (${type.count}回)`}
                   size="small"
                   variant={
@@ -190,7 +190,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
                 {workoutTypeAnalysis.map((type) => (
                   <Chip
                     key={type.name}
-                    icon={<span>{type.icon}</span>}
                     label={`${type.name} (${type.count}回)`}
                     size="small"
                     variant="outlined"
@@ -245,7 +244,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
                             spacing={1}
                             alignItems="center"
                           >
-                            <span>{workoutType?.icon || "🏋️"}</span>
                             <Typography variant="body2" color="text.secondary">
                               {workout.name}
                             </Typography>

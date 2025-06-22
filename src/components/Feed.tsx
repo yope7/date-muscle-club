@@ -844,10 +844,6 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
       sets: sets as any[],
       totalReps: (sets as any[]).reduce((sum, set) => sum + (set.reps || 0), 0),
       maxWeight: Math.max(...(sets as any[]).map((set) => set.weight || 0)),
-      totalWeight: (sets as any[]).reduce(
-        (sum, set) => sum + (set.weight || 0),
-        0
-      ),
     }));
   };
 
@@ -1131,7 +1127,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                       color: typeInfo.color,
                                     }}
                                   >
-                                    {typeInfo.icon}
+                                    🏋️
                                   </Box>
 
                                   {/* ヘッダー */}
@@ -1154,7 +1150,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                       }}
                                     >
                                       <span style={{ fontSize: "1.5rem" }}>
-                                        {typeInfo.icon}
+                                        🏋️
                                       </span>
                                       {group.type}
                                     </Typography>

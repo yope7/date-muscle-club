@@ -69,8 +69,17 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
   // よく行うワークアウトタイプを取得
   const frequentWorkoutTypes = useMemo(() => {
     const typeCounts = workouts.reduce((acc, workout) => {
-      const type = workout.name || "不明";
-      acc[type] = (acc[type] || 0) + 1;
+      // workout.setsからworkoutTypeを取得
+      const workoutTypesInSets =
+        workout.sets
+          ?.map((set) => set.workoutType)
+          .filter((type): type is string => Boolean(type)) || [];
+
+      // 各ワークアウトタイプをカウント
+      workoutTypesInSets.forEach((type) => {
+        acc[type] = (acc[type] || 0) + 1;
+      });
+
       return acc;
     }, {} as Record<string, number>);
 
@@ -87,7 +96,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
       return {
         name: type,
         count,
-        icon: workoutType?.icon || "🏋️",
         muscleGroup: muscleGroup?.name || "不明",
       };
     });
@@ -106,7 +114,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
 
     return {
       name: selectedWorkoutType,
-      icon: workoutType?.icon || "🏋️",
       muscleGroup: muscleGroup?.name || "不明",
     };
   }, [selectedWorkoutType]);
@@ -199,7 +206,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
           {frequentWorkoutTypes.map((type) => (
             <Chip
               key={type.name}
-              icon={<span>{type.icon}</span>}
               label={`${type.name} (${type.count}回)`}
               size="small"
               variant={
@@ -217,7 +223,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
       {selectedWorkoutTypeInfo && (
         <Box sx={{ mb: 2 }}>
           <Chip
-            icon={<span>{selectedWorkoutTypeInfo.icon}</span>}
+            // icon={<span>{selectedWorkoutTypeInfo.icon}</span>}
             label={`${selectedWorkoutTypeInfo.muscleGroup} - ${selectedWorkoutTypeInfo.name}`}
             color="primary"
             variant="filled"
