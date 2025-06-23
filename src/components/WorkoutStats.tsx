@@ -29,36 +29,108 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
     if (!selectedWorkoutType) {
       return workouts;
     }
-    return workouts.filter((workout) => workout.name === selectedWorkoutType);
+
+    // 選択されたワークアウトタイプを含むセットがあるワークアウトのみを返す
+    return workouts.filter((workout) => {
+      return workout.sets.some(
+        (set) =>
+          (set.workoutType || workout.name || "不明") === selectedWorkoutType
+      );
+    });
   }, [workouts, selectedWorkoutType]);
 
   const totalWorkouts = filteredWorkouts.length;
-  const totalSets = filteredWorkouts.reduce((sum, w) => sum + w.sets.length, 0);
-  const totalReps = filteredWorkouts.reduce(
-    (sum, w) => sum + w.sets.reduce((setSum, set) => setSum + set.reps, 0),
-    0
-  );
+  const totalSets = filteredWorkouts.reduce((sum, w) => {
+    if (selectedWorkoutType) {
+      // 選択されたワークアウトタイプのセットのみをカウント
+      return (
+        sum +
+        w.sets.filter(
+          (set) => (set.workoutType || w.name || "不明") === selectedWorkoutType
+        ).length
+      );
+    }
+    return sum + w.sets.length;
+  }, 0);
+  const totalReps = filteredWorkouts.reduce((sum, w) => {
+    if (selectedWorkoutType) {
+      // 選択されたワークアウトタイプのセットのみをカウント
+      return (
+        sum +
+        w.sets
+          .filter(
+            (set) =>
+              (set.workoutType || w.name || "不明") === selectedWorkoutType
+          )
+          .reduce((setSum, set) => setSum + set.reps, 0)
+      );
+    }
+    return sum + w.sets.reduce((setSum, set) => setSum + set.reps, 0);
+  }, 0);
   const maxWeight = Math.max(
-    ...filteredWorkouts.flatMap((w) => w.sets.map((s) => s.weight))
+    ...filteredWorkouts.flatMap((w) => {
+      if (selectedWorkoutType) {
+        // 選択されたワークアウトタイプのセットのみを対象
+        return w.sets
+          .filter(
+            (set) =>
+              (set.workoutType || w.name || "不明") === selectedWorkoutType
+          )
+          .map((s) => s.weight);
+      }
+      return w.sets.map((s) => s.weight);
+    })
   );
-  const totalVolume = filteredWorkouts.reduce(
-    (sum, w) =>
-      sum + w.sets.reduce((setSum, set) => setSum + set.weight * set.reps, 0),
-    0
-  );
+  const totalVolume = filteredWorkouts.reduce((sum, w) => {
+    if (selectedWorkoutType) {
+      // 選択されたワークアウトタイプのセットのみをカウント
+      return (
+        sum +
+        w.sets
+          .filter(
+            (set) =>
+              (set.workoutType || w.name || "不明") === selectedWorkoutType
+          )
+          .reduce((setSum, set) => setSum + set.weight * set.reps, 0)
+      );
+    }
+    return (
+      sum + w.sets.reduce((setSum, set) => setSum + set.weight * set.reps, 0)
+    );
+  }, 0);
   const avgWeight =
     totalSets > 0
-      ? filteredWorkouts.reduce(
-          (sum, w) =>
-            sum + w.sets.reduce((setSum, set) => setSum + set.weight, 0),
-          0
-        ) / totalSets
+      ? filteredWorkouts.reduce((sum, w) => {
+          if (selectedWorkoutType) {
+            // 選択されたワークアウトタイプのセットのみをカウント
+            return (
+              sum +
+              w.sets
+                .filter(
+                  (set) =>
+                    (set.workoutType || w.name || "不明") ===
+                    selectedWorkoutType
+                )
+                .reduce((setSum, set) => setSum + set.weight, 0)
+            );
+          }
+          return sum + w.sets.reduce((setSum, set) => setSum + set.weight, 0);
+        }, 0) / totalSets
       : 0;
   const avgReps = totalSets > 0 ? totalReps / totalSets : 0;
   const maxVolumeInOneDay = Math.max(
-    ...filteredWorkouts.map((w) =>
-      w.sets.reduce((sum, set) => sum + set.weight * set.reps, 0)
-    )
+    ...filteredWorkouts.map((w) => {
+      if (selectedWorkoutType) {
+        // 選択されたワークアウトタイプのセットのみをカウント
+        return w.sets
+          .filter(
+            (set) =>
+              (set.workoutType || w.name || "不明") === selectedWorkoutType
+          )
+          .reduce((sum, set) => sum + set.weight * set.reps, 0);
+      }
+      return w.sets.reduce((sum, set) => sum + set.weight * set.reps, 0);
+    })
   );
 
   const lastWorkout = filteredWorkouts[0];
@@ -66,39 +138,106 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
     ? format(lastWorkout.date.toDate(), "yyyy年M月d日", { locale: ja })
     : "なし";
 
+  // ワークアウトタイプの情報を取得するヘルパー関数
+  const getWorkoutTypeInfo = (typeName: string) => {
+    // まず完全一致で検索
+    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
+
+    // 完全一致が見つからない場合、部分一致で検索
+    if (!workoutType) {
+      workoutType = workoutTypes.find(
+        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
+      );
+    }
+
+    // それでも見つからない場合、筋肉グループを推測
+    if (!workoutType) {
+      const muscleGroupMap: { [key: string]: string } = {
+        胸: "chest",
+        背中: "back",
+        足: "legs",
+        腹筋: "abs",
+        腕: "arms",
+        肩: "arms",
+        有酸素: "cardio",
+        カーディオ: "cardio",
+      };
+
+      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
+        typeName.includes(key)
+      );
+
+      if (matchedMuscleGroup) {
+        return {
+          name: typeName,
+          muscleGroup:
+            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
+            "不明",
+        };
+      }
+    }
+
+    if (workoutType) {
+      const muscleGroup = muscleGroups.find(
+        (mg) => mg.id === workoutType.muscleGroupId
+      );
+      return {
+        name: typeName,
+        muscleGroup: muscleGroup?.name || "不明",
+      };
+    }
+
+    return {
+      name: typeName,
+      muscleGroup: "不明",
+    };
+  };
+
   // よく行うワークアウトタイプを取得
   const frequentWorkoutTypes = useMemo(() => {
     const typeCounts = workouts.reduce((acc, workout) => {
-      // workout.setsからworkoutTypeを取得
       const workoutTypesInSets =
         workout.sets
-          ?.map((set) => set.workoutType)
+          ?.map((set) => set.workoutType || workout.name || "不明")
           .filter((type): type is string => Boolean(type)) || [];
 
-      // 各ワークアウトタイプをカウント
       workoutTypesInSets.forEach((type) => {
         acc[type] = (acc[type] || 0) + 1;
       });
-
       return acc;
     }, {} as Record<string, number>);
 
     const sortedTypes = Object.entries(typeCounts)
       .sort(([, a], [, b]) => b - a)
-      .slice(0, 5); // 上位5つを表示
+      .slice(0, 5);
 
     return sortedTypes.map(([type, count]) => {
-      const workoutType = workoutTypes.find((wt) => wt.name === type);
-      const muscleGroup = workoutType
-        ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-        : null;
-
+      const typeInfo = getWorkoutTypeInfo(type);
       return {
         name: type,
         count,
-        muscleGroup: muscleGroup?.name || "不明",
+        muscleGroup: typeInfo.muscleGroup,
       };
     });
+  }, [workouts]);
+
+  // 筋肉グループ別の分析
+  const muscleGroupAnalysis = useMemo(() => {
+    const groupCounts = workouts.reduce((acc, workout) => {
+      const workoutTypesInSets =
+        workout.sets
+          ?.map((set) => set.workoutType || workout.name || "不明")
+          .filter((type): type is string => Boolean(type)) || [];
+      workoutTypesInSets.forEach((type) => {
+        const typeInfo = getWorkoutTypeInfo(type);
+        const muscleGroup = typeInfo.muscleGroup;
+        acc[muscleGroup] = (acc[muscleGroup] || 0) + 1;
+      });
+      return acc;
+    }, {} as Record<string, number>);
+    return Object.entries(groupCounts)
+      .sort(([, a], [, b]) => b - a)
+      .map(([group, count]) => ({ group, count }));
   }, [workouts]);
 
   // 選択されたワークアウトタイプの情報を取得
@@ -206,7 +345,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
           {frequentWorkoutTypes.map((type) => (
             <Chip
               key={type.name}
-              label={`${type.name} (${type.count}回)`}
+              label={`${type.name} `}
               size="small"
               variant={
                 selectedWorkoutType === type.name ? "filled" : "outlined"
@@ -251,21 +390,22 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
         <Box
           ref={scrollContainerRef}
           sx={{
-            display: "flex",
-            gap: 2,
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            gap: 1,
             overflowX: "auto",
             scrollBehavior: "smooth",
             "&::-webkit-scrollbar": { display: "none" },
             msOverflowStyle: "none",
             scrollbarWidth: "none",
-            px: 1,
+            px: 0,
           }}
         >
           {stats.map((stat, index) => (
             <Card
               key={index}
               sx={{
-                minWidth: 200,
+                minWidth: "40vw",
                 flexShrink: 0,
                 bgcolor: "background.paper",
                 boxShadow: 2,

@@ -29,6 +29,8 @@ import {
   Snackbar,
   Alert,
   TextField,
+  Slider,
+  Chip,
 } from "@mui/material";
 import {
   ChevronLeft,
@@ -75,6 +77,17 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const [selectedWorkoutType, setSelectedWorkoutType] =
     useState<WorkoutType | null>(null);
   const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
+  const [bulkSetCount, setBulkSetCount] = useState(1);
+
+  // よく使う重量・回数のプリセット
+  const weightRepsPresets = [
+    { weight: 20, reps: 15, label: "軽め" },
+    { weight: 25, reps: 12, label: "標準" },
+    { weight: 30, reps: 10, label: "やや重め" },
+    { weight: 40, reps: 8, label: "重め" },
+    { weight: 50, reps: 6, label: "かなり重め" },
+    { weight: 60, reps: 5, label: "最大重量" },
+  ];
 
   // デフォルト値を取得する関数
   const getDefaultValues = () => {
@@ -200,14 +213,18 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const handleAddSet = async () => {
     if (!selectedWorkout) return;
 
-    const updatedSets = [
-      ...selectedWorkout.sets,
-      {
+    let newSets = [];
+
+    // 常に一括追加モード（セット数が1の場合は単一セット）
+    for (let i = 0; i < bulkSetCount; i++) {
+      newSets.push({
         weight: dialogValues.weight,
         reps: dialogValues.reps,
         workoutType: selectedWorkoutType?.name || "ベンチプレス",
-      },
-    ];
+      });
+    }
+
+    const updatedSets = [...selectedWorkout.sets, ...newSets];
 
     const updatedWorkout: WorkoutRecord = {
       ...selectedWorkout,
@@ -454,40 +471,97 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
               </Box>
             </Box>
           ) : (
-            <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-              <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  重量
-                </Typography>
-                <NumberPicker
-                  value={dialogValues.weight}
-                  onChange={(value) =>
-                    setDialogValues({ ...dialogValues, weight: value })
-                  }
-                  min={0}
-                  max={150}
-                  step={2.5}
-                  unit="kg"
-                  allowEmpty
-                />
+            <>
+              <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    重量
+                  </Typography>
+                  <NumberPicker
+                    value={dialogValues.weight}
+                    onChange={(value) =>
+                      setDialogValues({ ...dialogValues, weight: value })
+                    }
+                    min={0}
+                    max={150}
+                    step={2.5}
+                    unit="kg"
+                    allowEmpty
+                  />
+                </Box>
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    gutterBottom
+                  >
+                    回数
+                  </Typography>
+                  <NumberPicker
+                    value={dialogValues.reps}
+                    onChange={(value) =>
+                      setDialogValues({ ...dialogValues, reps: value })
+                    }
+                    min={0}
+                    max={100}
+                    step={1}
+                    unit="回"
+                  />
+                </Box>
               </Box>
-              <Box sx={{ flex: 1 }}>
+
+              {/* プリセットボタン */}
+              <Box sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" gutterBottom>
-                  回数
+                  よく使う設定
                 </Typography>
-                <NumberPicker
-                  value={dialogValues.reps}
-                  onChange={(value) =>
-                    setDialogValues({ ...dialogValues, reps: value })
-                  }
-                  min={0}
-                  max={100}
-                  step={1}
-                  unit="回"
-                />
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  {weightRepsPresets.map((preset) => (
+                    <Chip
+                      key={preset.label}
+                      label={`${preset.weight}kg × ${preset.reps}回`}
+                      size="small"
+                      variant="outlined"
+                      onClick={() =>
+                        setDialogValues({
+                          weight: preset.weight,
+                          reps: preset.reps,
+                        })
+                      }
+                      sx={{
+                        cursor: "pointer",
+                        "&:hover": {
+                          bgcolor: "primary.main",
+                          color: "primary.contrastText",
+                        },
+                      }}
+                    />
+                  ))}
+                </Stack>
               </Box>
-            </Box>
+            </>
           )}
+
+          {/* セット数選択（常に表示） */}
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              セット数: {bulkSetCount}セット
+            </Typography>
+            <Slider
+              value={bulkSetCount}
+              onChange={(_, value) => setBulkSetCount(value as number)}
+              min={1}
+              max={5}
+              step={1}
+              marks
+              valueLabelDisplay="auto"
+              sx={{ mt: 1 }}
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button
@@ -498,7 +572,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
             キャンセル
           </Button>
           <Button onClick={handleAddSet} variant="contained">
-            追加
+            {bulkSetCount === 1 ? "追加" : `${bulkSetCount}セット追加`}
           </Button>
         </DialogActions>
       </Dialog>
@@ -514,7 +588,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           severity="success"
           sx={{ width: "100%" }}
         >
-          セットを追加しました
+          {bulkSetCount === 1
+            ? "セットを追加しました"
+            : `${bulkSetCount}セットを追加しました`}
         </Alert>
       </Snackbar>
     </Box>

@@ -16,6 +16,9 @@ import {
   Button,
   TextField,
   Divider,
+  Slider,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
@@ -43,32 +46,91 @@ export const WorkoutSets = ({
   const [deleteWorkoutDialogOpen, setDeleteWorkoutDialogOpen] = useState(false);
   const [newSetDialogOpen, setNewSetDialogOpen] = useState(false);
   const [newSet, setNewSet] = useState({ weight: "", reps: "" });
+  const [bulkSetCount, setBulkSetCount] = useState(1);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
 
-  const totalWeight = workout.sets.reduce(
+  // よく使う重量・回数のプリセット
+  const weightRepsPresets = [
+    { weight: 20, reps: 15, label: "軽め" },
+    { weight: 25, reps: 12, label: "標準" },
+    { weight: 30, reps: 10, label: "やや重め" },
+    { weight: 40, reps: 8, label: "重め" },
+    { weight: 50, reps: 6, label: "かなり重め" },
+    { weight: 60, reps: 5, label: "最大重量" },
+  ];
+
+  const totalVolume = workout.sets.reduce(
     (sum, set) => sum + set.weight * set.reps,
     0
   );
   const totalSets = workout.sets.length;
   const workoutDate = workout.date.toDate();
 
+  // ワークアウトタイプの情報を取得するヘルパー関数
+  const getWorkoutTypeInfo = (typeName: string) => {
+    // まず完全一致で検索
+    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
+
+    // 完全一致が見つからない場合、部分一致で検索
+    if (!workoutType) {
+      workoutType = workoutTypes.find(
+        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
+      );
+    }
+
+    // それでも見つからない場合、筋肉グループを推測
+    if (!workoutType) {
+      const muscleGroupMap: { [key: string]: string } = {
+        胸: "chest",
+        背中: "back",
+        足: "legs",
+        腹筋: "abs",
+        腕: "arms",
+        肩: "arms",
+        有酸素: "cardio",
+        カーディオ: "cardio",
+      };
+
+      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
+        typeName.includes(key)
+      );
+
+      if (matchedMuscleGroup) {
+        return {
+          name: typeName,
+          muscleGroup:
+            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
+            "不明",
+          muscleGroupId: matchedMuscleGroup[1],
+        };
+      }
+    }
+
+    if (workoutType) {
+      const muscleGroup = muscleGroups.find(
+        (mg) => mg.id === workoutType.muscleGroupId
+      );
+      return {
+        name: typeName,
+        muscleGroup: muscleGroup?.name || "不明",
+        muscleGroupId: workoutType.muscleGroupId,
+      };
+    }
+
+    return {
+      name: typeName,
+      muscleGroup: "不明",
+      muscleGroupId: "unknown",
+    };
+  };
+
   // ワークアウトタイプの情報を取得
-  // console.log("Current workout name:", workout.name);
-  // console.log("Workout sets:", workout.sets);
-  const workoutTypeInfo = workoutTypes.find(
-    (type) => type.name === workout.name
-  );
-  // console.log("Found workout type:", workoutTypeInfo);
-  const muscleGroupInfo = workoutTypeInfo
-    ? muscleGroups.find((group) => group.id === workoutTypeInfo.muscleGroupId)
-    : null;
-  // console.log("Found muscle group:", muscleGroupInfo);
+  const workoutTypeInfo = getWorkoutTypeInfo(workout.name || "不明");
 
   // ワークアウトタイプごとにセットをグループ化
   const groupedSets = workout.sets.reduce((acc, set, index) => {
     // セットのworkoutTypeを使用してグループ化
-    const type =
-      set.workoutType || workoutTypeInfo?.muscleGroupId || "strength";
-    // console.log("Grouping set with type:", type, "for set:", set);
+    const type = set.workoutType || workoutTypeInfo.muscleGroupId || "strength";
     if (!acc[type]) {
       acc[type] = [];
     }
@@ -118,13 +180,17 @@ export const WorkoutSets = ({
     if (!newSet.weight || !newSet.reps) return;
 
     try {
-      const updatedSets = [
-        ...workout.sets,
-        {
+      let newSets = [];
+
+      // 常に一括追加モード（セット数が1の場合は単一セット）
+      for (let i = 0; i < bulkSetCount; i++) {
+        newSets.push({
           weight: Number(newSet.weight),
           reps: Number(newSet.reps),
-        },
-      ];
+        });
+      }
+
+      const updatedSets = [...workout.sets, ...newSets];
 
       const updatedWorkout: WorkoutRecord = {
         ...workout,
@@ -140,10 +206,16 @@ export const WorkoutSets = ({
 
       setNewSet({ weight: "", reps: "" });
       setNewSetDialogOpen(false);
+      setBulkSetCount(1);
+      setSnackbarOpen(true);
     } catch (error) {
       console.error("Error adding set:", error);
       alert("セットの追加に失敗しました");
     }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbarOpen(false);
   };
 
   return (
@@ -186,12 +258,12 @@ export const WorkoutSets = ({
         <Divider />
 
         {Object.entries(groupedSets).map(([type, sets]) => {
-          const muscleGroup = muscleGroups.find((group) => group.id === type);
+          const typeInfo = getWorkoutTypeInfo(type);
           const workoutTypeName = sets[0]?.workoutType || type;
           return (
             <Box key={type} sx={{ mb: 2 }}>
               <Typography variant="subtitle1" color="primary" gutterBottom>
-                {muscleGroup?.icon} {muscleGroup?.name} - {workoutTypeName}
+                {typeInfo.muscleGroup} - {workoutTypeName}
               </Typography>
               <Box
                 sx={{
@@ -313,6 +385,105 @@ export const WorkoutSets = ({
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={newSetDialogOpen}
+        onClose={() => setNewSetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>新しいセットを追加</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <TextField
+              label="重量 (kg)"
+              type="number"
+              value={newSet.weight}
+              onChange={(e) => setNewSet({ ...newSet, weight: e.target.value })}
+              fullWidth
+              inputProps={{ min: 0, step: 0.5 }}
+            />
+            <TextField
+              label="回数"
+              type="number"
+              value={newSet.reps}
+              onChange={(e) => setNewSet({ ...newSet, reps: e.target.value })}
+              fullWidth
+              inputProps={{ min: 0 }}
+            />
+          </Box>
+
+          {/* プリセットボタン */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              よく使う設定
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              {weightRepsPresets.map((preset) => (
+                <Chip
+                  key={preset.label}
+                  label={`${preset.weight}kg × ${preset.reps}回`}
+                  size="small"
+                  variant="outlined"
+                  onClick={() =>
+                    setNewSet({
+                      weight: preset.weight.toString(),
+                      reps: preset.reps.toString(),
+                    })
+                  }
+                  sx={{
+                    cursor: "pointer",
+                    "&:hover": {
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                    },
+                  }}
+                />
+              ))}
+            </Stack>
+          </Box>
+
+          {/* セット数選択（常に表示） */}
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              セット数: {bulkSetCount}セット
+            </Typography>
+            <Slider
+              value={bulkSetCount}
+              onChange={(_, value) => setBulkSetCount(value as number)}
+              min={1}
+              max={5}
+              step={1}
+              marks
+              valueLabelDisplay="auto"
+              sx={{ mt: 1 }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewSetDialogOpen(false)}>キャンセル</Button>
+          <Button onClick={handleAddSet} variant="contained">
+            {bulkSetCount === 1 ? "追加" : `${bulkSetCount}セット追加`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={handleCloseSnackbar}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={handleCloseSnackbar}
+          severity="success"
+          sx={{ width: "100%" }}
+        >
+          {bulkSetCount === 1
+            ? "セットを追加しました"
+            : `${bulkSetCount}セットを追加しました`}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

@@ -849,7 +849,43 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
   // ワークアウトタイプの情報を取得
   const getWorkoutTypeInfo = (typeName: string) => {
-    const workoutType = workoutTypes.find((wt) => wt.name === typeName);
+    // まず完全一致で検索
+    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
+
+    // 完全一致が見つからない場合、部分一致で検索
+    if (!workoutType) {
+      workoutType = workoutTypes.find(
+        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
+      );
+    }
+
+    // それでも見つからない場合、筋肉グループを推測
+    if (!workoutType) {
+      const muscleGroupMap: { [key: string]: string } = {
+        胸: "chest",
+        背中: "back",
+        足: "legs",
+        腹筋: "abs",
+        腕: "arms",
+        肩: "arms",
+        有酸素: "cardio",
+        カーディオ: "cardio",
+      };
+
+      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
+        typeName.includes(key)
+      );
+
+      if (matchedMuscleGroup) {
+        return {
+          muscleGroup:
+            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
+            "不明",
+          color: getMuscleGroupColor(matchedMuscleGroup[1]),
+        };
+      }
+    }
+
     if (workoutType) {
       const muscleGroup = muscleGroups.find(
         (mg) => mg.id === workoutType.muscleGroupId
@@ -859,6 +895,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         color: getMuscleGroupColor(workoutType.muscleGroupId),
       };
     }
+
     return {
       muscleGroup: "不明",
       color: "primary.main",

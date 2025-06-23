@@ -25,12 +25,74 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
     null
   );
 
+  // ワークアウトタイプの情報を取得するヘルパー関数
+  const getWorkoutTypeInfo = (typeName: string) => {
+    // まず完全一致で検索
+    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
+
+    // 完全一致が見つからない場合、部分一致で検索
+    if (!workoutType) {
+      workoutType = workoutTypes.find(
+        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
+      );
+    }
+
+    // それでも見つからない場合、筋肉グループを推測
+    if (!workoutType) {
+      const muscleGroupMap: { [key: string]: string } = {
+        胸: "chest",
+        背中: "back",
+        足: "legs",
+        腹筋: "abs",
+        腕: "arms",
+        肩: "arms",
+        有酸素: "cardio",
+        カーディオ: "cardio",
+      };
+
+      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
+        typeName.includes(key)
+      );
+
+      if (matchedMuscleGroup) {
+        return {
+          name: typeName,
+          muscleGroup:
+            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
+            "不明",
+        };
+      }
+    }
+
+    if (workoutType) {
+      const muscleGroup = muscleGroups.find(
+        (mg) => mg.id === workoutType.muscleGroupId
+      );
+      return {
+        name: typeName,
+        muscleGroup: muscleGroup?.name || "不明",
+      };
+    }
+
+    return {
+      name: typeName,
+      muscleGroup: "不明",
+    };
+  };
+
   // フィルタリングされたワークアウト
   const filteredWorkouts = useMemo(() => {
     if (!selectedWorkoutType) {
       return workouts;
     }
-    return workouts.filter((workout) => workout.name === selectedWorkoutType);
+
+    // 選択されたワークアウトタイプを含むセットがあるワークアウトのみを返す
+    return workouts.filter((workout) => {
+      return workout.sets.some(
+        (set) =>
+          (set.workoutType || workout.name || "不明") === selectedWorkoutType
+      );
+    });
   }, [workouts, selectedWorkoutType]);
 
   // 日付でソート
@@ -43,8 +105,13 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
     const typeCounts = workouts.reduce((acc, workout) => {
       const workoutTypesInSets =
         workout.sets
-          ?.map((set) => set.workoutType)
+          ?.map((set) => set.workoutType || workout.name || "不明")
           .filter((type): type is string => Boolean(type)) || [];
+
+      // デバッグ: セットデータの構造を確認
+      console.log("Workout sets:", workout.sets);
+      console.log("WorkoutTypesInSets:", workoutTypesInSets);
+
       workoutTypesInSets.forEach((type) => {
         acc[type] = (acc[type] || 0) + 1;
       });
@@ -56,14 +123,11 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
       .slice(0, 5);
 
     return sortedTypes.map(([type, count]) => {
-      const workoutType = workoutTypes.find((wt) => wt.name === type);
-      const muscleGroup = workoutType
-        ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-        : null;
+      const typeInfo = getWorkoutTypeInfo(type);
       return {
         name: type,
         count,
-        muscleGroup: muscleGroup?.name || "不明",
+        muscleGroup: typeInfo.muscleGroup,
       };
     });
   }, [workouts]);
@@ -71,16 +135,7 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
   // 選択されたワークアウトタイプの情報を取得
   const selectedWorkoutTypeInfo = useMemo(() => {
     if (!selectedWorkoutType) return null;
-    const workoutType = workoutTypes.find(
-      (wt) => wt.name === selectedWorkoutType
-    );
-    const muscleGroup = workoutType
-      ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-      : null;
-    return {
-      name: selectedWorkoutType,
-      muscleGroup: muscleGroup?.name || "不明",
-    };
+    return getWorkoutTypeInfo(selectedWorkoutType);
   }, [selectedWorkoutType]);
 
   // ワークアウトタイプ別の分析
@@ -88,7 +143,7 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
     const typeCounts = workouts.reduce((acc, workout) => {
       const workoutTypesInSets =
         workout.sets
-          ?.map((set) => set.workoutType)
+          ?.map((set) => set.workoutType || workout.name || "不明")
           .filter((type): type is string => Boolean(type)) || [];
       workoutTypesInSets.forEach((type) => {
         acc[type] = (acc[type] || 0) + 1;
@@ -98,14 +153,11 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
     return Object.entries(typeCounts)
       .sort(([, a], [, b]) => b - a)
       .map(([type, count]) => {
-        const workoutType = workoutTypes.find((wt) => wt.name === type);
-        const muscleGroup = workoutType
-          ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-          : null;
+        const typeInfo = getWorkoutTypeInfo(type);
         return {
           name: type,
           count,
-          muscleGroup: muscleGroup?.name || "不明",
+          muscleGroup: typeInfo.muscleGroup,
         };
       });
   }, [workouts]);
@@ -159,7 +211,7 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
               {frequentWorkoutTypes.map((type) => (
                 <Chip
                   key={type.name}
-                  label={`${type.name} (${type.count}回)`}
+                  label={`${type.name} `}
                   size="small"
                   variant={
                     selectedWorkoutType === type.name ? "filled" : "outlined"
@@ -175,30 +227,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
           </Box>
 
           {/* ワークアウトタイプ分析 */}
-          {workoutTypeAnalysis.length > 1 && !selectedWorkoutTypeInfo && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                ワークアウトタイプ別分析
-              </Typography>
-              <Stack
-                direction="row"
-                spacing={1}
-                flexWrap="wrap"
-                useFlexGap
-                sx={{ mb: 2 }}
-              >
-                {workoutTypeAnalysis.map((type) => (
-                  <Chip
-                    key={type.name}
-                    label={`${type.name} (${type.count}回)`}
-                    size="small"
-                    variant="outlined"
-                  />
-                ))}
-              </Stack>
-              <Divider sx={{ my: 2 }} />
-            </Box>
-          )}
 
           {sortedWorkouts.length === 0 ? (
             <Typography color="text.secondary" textAlign="center">
@@ -206,19 +234,25 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
             </Typography>
           ) : (
             sortedWorkouts.map((workout, index) => {
-              const workoutType = workoutTypes.find(
-                (wt) => wt.name === workout.name
+              const workoutTypeInfo = getWorkoutTypeInfo(
+                workout.name || "不明"
               );
-              const muscleGroup = workoutType
-                ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-                : null;
 
-              const totalVolume = workout.sets.reduce(
+              // 選択されたワークアウトタイプがある場合、そのセットのみをフィルタリング
+              const filteredSets = selectedWorkoutType
+                ? workout.sets.filter(
+                    (set) =>
+                      (set.workoutType || workout.name || "不明") ===
+                      selectedWorkoutType
+                  )
+                : workout.sets;
+
+              const totalVolume = filteredSets.reduce(
                 (sum, set) => sum + set.weight * set.reps,
                 0
               );
               const maxWeight = Math.max(
-                ...workout.sets.map((set) => set.weight)
+                ...filteredSets.map((set) => set.weight)
               );
 
               return (
@@ -238,7 +272,7 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
                             locale: ja,
                           })}
                         </Typography>
-                        {workout.name && (
+                        {workout.name && !selectedWorkoutType && (
                           <Stack
                             direction="row"
                             spacing={1}
@@ -247,50 +281,99 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
                             <Typography variant="body2" color="text.secondary">
                               {workout.name}
                             </Typography>
-                            {muscleGroup && (
-                              <Chip
-                                label={muscleGroup.name}
-                                size="small"
-                                variant="outlined"
-                              />
-                            )}
+                            <Chip
+                              label={workoutTypeInfo.muscleGroup}
+                              size="small"
+                              variant="outlined"
+                            />
                           </Stack>
                         )}
                       </Box>
                       <Box sx={{ textAlign: "right" }}>
                         <Typography variant="body2" color="text.secondary">
-                          {workout.sets.length}セット
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          総挙上量: {totalVolume}kg
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          最高重量: {maxWeight}kg
+                          {filteredSets.length}セット
                         </Typography>
                       </Box>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Stack spacing={2}>
-                      {workout.sets.map((set, setIndex) => (
-                        <Paper key={setIndex} sx={{ p: 2 }}>
-                          <Box
-                            sx={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                            }}
-                          >
-                            <Typography variant="body1">
-                              セット {setIndex + 1}: {set.weight}kg × {set.reps}
-                              回
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              ({(set.weight * set.reps).toLocaleString()}kg)
-                            </Typography>
-                          </Box>
-                        </Paper>
-                      ))}
+                      {/* 種目ごとにセットをグループ化 */}
+                      {(() => {
+                        const groupedByType = filteredSets.reduce(
+                          (acc, set) => {
+                            const type =
+                              set.workoutType || workout.name || "不明";
+                            if (!acc[type]) {
+                              acc[type] = [];
+                            }
+                            acc[type].push(set);
+                            return acc;
+                          },
+                          {} as Record<string, typeof filteredSets>
+                        );
+
+                        return Object.entries(groupedByType).map(
+                          ([type, sets]) => (
+                            <Box key={type}>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  mb: 1,
+                                  color: "primary.main",
+                                  fontWeight: "bold",
+                                  borderBottom: "2px solid",
+                                  borderColor: "primary.main",
+                                  pb: 0.5,
+                                }}
+                              >
+                                {type}
+                              </Typography>
+                              <Stack spacing={1}>
+                                {sets.map((set, setIndex) => {
+                                  // デバッグ: 各セットの構造を確認
+                                  console.log(`Set ${setIndex}:`, set);
+
+                                  return (
+                                    <Paper key={setIndex} sx={{ p: 2 }}>
+                                      <Box
+                                        sx={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                        }}
+                                      >
+                                        <Box>
+                                          <Typography variant="body1">
+                                            セット{setIndex + 1}：{set.weight}kg
+                                            × {set.reps}回
+                                          </Typography>
+                                          {(set.workoutType ||
+                                            workout.name) && (
+                                            <Typography
+                                              variant="caption"
+                                              color="text.secondary"
+                                            >
+                                              種目:{" "}
+                                              {set.workoutType || workout.name}
+                                            </Typography>
+                                          )}
+                                        </Box>
+                                        <Typography
+                                          variant="body2"
+                                          color="text.secondary"
+                                        >
+                                          {/* ({(set.weight * set.reps).toLocaleString()}kg) */}
+                                        </Typography>
+                                      </Box>
+                                    </Paper>
+                                  );
+                                })}
+                              </Stack>
+                            </Box>
+                          )
+                        );
+                      })()}
                     </Stack>
                   </AccordionDetails>
                 </Accordion>
