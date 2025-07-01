@@ -195,10 +195,19 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       setSelectedWorkout(workout);
     } else {
       // ワークアウトが存在しない場合は新しいワークアウトを作成
+      // 選択した日付に現在の時刻を設定
+      const workoutDate = new Date(date);
+      workoutDate.setHours(
+        new Date().getHours(),
+        new Date().getMinutes(),
+        new Date().getSeconds(),
+        new Date().getMilliseconds()
+      );
+
       const newWorkout: WorkoutRecord = {
         id: "",
         userId: user?.uid || "",
-        date: Timestamp.fromDate(date),
+        date: Timestamp.fromDate(workoutDate),
         sets: [],
         tags: [],
         memo: "",

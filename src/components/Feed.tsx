@@ -56,6 +56,7 @@ import {
   updateDoc,
   writeBatch,
   getDoc,
+  Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutGraphs } from "./WorkoutGraphs";
@@ -818,6 +819,61 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     }
   };
 
+  // 既存のワークアウトの時刻を修正する関数
+  const fixWorkoutTimes = async () => {
+    setIsUpdatingRecords(true);
+    try {
+      // 全ユーザーのワークアウトを取得
+      const workoutsRef = collection(db, "workouts");
+      const workoutsSnapshot = await getDocs(workoutsRef);
+      const allWorkouts = workoutsSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as WorkoutRecord[];
+
+      const batch = writeBatch(db);
+      let updateCount = 0;
+
+      allWorkouts.forEach((workout) => {
+        const workoutDate = workout.date.toDate();
+        const hours = workoutDate.getHours();
+        const minutes = workoutDate.getMinutes();
+
+        // 時刻が00:00の場合は現在の時刻に修正
+        if (hours === 0 && minutes === 0) {
+          const fixedDate = new Date(workoutDate);
+          fixedDate.setHours(
+            new Date().getHours(),
+            new Date().getMinutes(),
+            new Date().getSeconds(),
+            new Date().getMilliseconds()
+          );
+
+          batch.update(doc(db, "workouts", workout.id), {
+            date: Timestamp.fromDate(fixedDate),
+          });
+          updateCount++;
+        }
+      });
+
+      if (updateCount > 0) {
+        await batch.commit();
+        console.log(`${updateCount}件のワークアウトの時刻を修正しました`);
+
+        // 更新後にフィードをリフレッシュ
+        if (onRefresh) {
+          await onRefresh();
+        }
+      } else {
+        console.log("修正が必要なワークアウトはありませんでした");
+      }
+    } catch (error) {
+      console.error("ワークアウト時刻の修正に失敗しました:", error);
+    } finally {
+      setIsUpdatingRecords(false);
+    }
+  };
+
   const handleProfileClick = (userId: string) => {
     setSelectedProfile(userId);
     setProfileDialogOpen(true);
@@ -1084,9 +1140,38 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                           {userInfo?.displayName || "不明なユーザー"}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
-                          {format(workout.date.toDate(), "yyyy年M月d日 HH:mm", {
-                            locale: ja,
-                          })}
+                          {(() => {
+                            const workoutDate = workout.date.toDate();
+                            const hours = workoutDate.getHours();
+                            const minutes = workoutDate.getMinutes();
+
+                            // 時刻が00:00の場合は「今日」または「昨日」を表示
+                            if (hours === 0 && minutes === 0) {
+                              const today = new Date();
+                              const yesterday = new Date(today);
+                              yesterday.setDate(yesterday.getDate() - 1);
+
+                              if (
+                                format(workoutDate, "yyyy-MM-dd") ===
+                                format(today, "yyyy-MM-dd")
+                              ) {
+                                return "今日";
+                              } else if (
+                                format(workoutDate, "yyyy-MM-dd") ===
+                                format(yesterday, "yyyy-MM-dd")
+                              ) {
+                                return "昨日";
+                              } else {
+                                return format(workoutDate, "yyyy年M月d日", {
+                                  locale: ja,
+                                });
+                              }
+                            } else {
+                              return format(workoutDate, "yyyy年M月d日 HH:mm", {
+                                locale: ja,
+                              });
+                            }
+                          })()}
                         </Typography>
                       </Box>
                       {workout.isNewRecord && (
