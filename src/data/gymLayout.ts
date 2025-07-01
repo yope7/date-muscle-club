@@ -122,7 +122,7 @@ export const gymLayout: GymLayout = {
     },
     {
       id: "tube_resistance",
-      name: "チューブ系",
+      name: "チューブ",
       muscleGroupId: "arms", // 代表してarmsに
       position: { x: 170, y: 160, width: 70, height: 50 },
       icon: "💪",

@@ -185,9 +185,16 @@ export const workoutTypes: WorkoutType[] = [
   },
   {
     id: "tube_resistance",
-    name: "チューブ系",
+    name: "チューブ",
     muscleGroupId: "arms",
     icon: "🏋️",
     gymMachineId: "tube_resistance",
+  },
+  {
+    id: "incline_arm_curl",
+    name: "インクラインアームカール",
+    muscleGroupId: "arms",
+    icon: "🏋️",
+    gymMachineId: "dumbbell_area",
   },
 ];

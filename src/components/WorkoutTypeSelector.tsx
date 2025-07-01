@@ -138,10 +138,17 @@ export const WorkoutTypeSelector: React.FC<WorkoutTypeSelectorProps> = ({
 
     const horizontalPadding = isMobile ? 16 : 32;
     const contentWidth = paperWidth - horizontalPadding;
+    const titleHeight = isMobile ? 100 : 110;
+    const verticalPadding = isMobile ? 16 : 32;
 
     if (contentWidth <= 0) return;
 
-    const scale = contentWidth / gymLayout.width;
+    const availableHeight =
+      window.innerHeight * 0.95 - titleHeight - verticalPadding;
+    const scaleByHeight = availableHeight / gymLayout.height;
+    const scaleByWidth = contentWidth / gymLayout.width;
+    const scale = Math.min(scaleByHeight, scaleByWidth);
+
     const scaledMapWidth = gymLayout.width * scale;
     const scaledMapHeight = gymLayout.height * scale;
 
@@ -150,9 +157,6 @@ export const WorkoutTypeSelector: React.FC<WorkoutTypeSelectorProps> = ({
       height: scaledMapHeight,
       scale: scale,
     });
-
-    const titleHeight = isMobile ? 100 : 110;
-    const verticalPadding = isMobile ? 16 : 32;
 
     const totalHeight = scaledMapHeight + titleHeight + verticalPadding;
 
@@ -215,7 +219,7 @@ export const WorkoutTypeSelector: React.FC<WorkoutTypeSelectorProps> = ({
               sx={{
                 minHeight: 40,
                 "& .MuiTabs-indicator": {
-                  backgroundColor: "#80DEEA", // A light teal for the indicator
+                  backgroundColor: "#80DEEA",
                 },
               }}
               variant={isMobile ? "fullWidth" : "standard"}
