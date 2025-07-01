@@ -8,12 +8,30 @@ import {
   IconButton,
   Chip,
   Stack,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Alert,
 } from "@mui/material";
 import { WorkoutRecord } from "@/types/workout";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
-import { ChevronLeft, ChevronRight } from "@mui/icons-material";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Help as HelpIcon,
+} from "@mui/icons-material";
 import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
+import {
+  getTotalIntensity,
+  getAverageIntensity,
+  getAverageIntensityExcludingNullDays,
+  getDaysSinceFirstWorkout,
+  calculateMaxWeights,
+} from "@/lib/intensityCalculator";
 
 interface WorkoutStatsProps {
   workouts: WorkoutRecord[];
@@ -23,6 +41,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
   const [selectedWorkoutType, setSelectedWorkoutType] = useState<string | null>(
     null
   );
+  const [intensityDialogOpen, setIntensityDialogOpen] = useState(false);
 
   // フィルタリングされたワークアウト
   const filteredWorkouts = useMemo(() => {
@@ -132,6 +151,13 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
       return w.sets.reduce((sum, set) => sum + set.weight * set.reps, 0);
     })
   );
+
+  // 強度計算
+  const totalIntensity = getTotalIntensity(filteredWorkouts);
+  const averageIntensity =
+    getAverageIntensityExcludingNullDays(filteredWorkouts);
+  const maxWeights = calculateMaxWeights(filteredWorkouts);
+  const daysSinceFirstWorkout = getDaysSinceFirstWorkout(filteredWorkouts);
 
   const lastWorkout = filteredWorkouts[0];
   const lastWorkoutDate = lastWorkout
@@ -257,7 +283,16 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
     };
   }, [selectedWorkoutType]);
 
-  const stats = [
+  const stats: Array<{
+    title: string;
+    value: number;
+    unit: string;
+  }> = [
+    {
+      title: "初日から",
+      value: daysSinceFirstWorkout,
+      unit: "日",
+    },
     {
       title: "トレーニング日数",
       value: totalWorkouts,
@@ -294,9 +329,9 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
       unit: "回",
     },
     {
-      title: "1日の最高挙上量",
-      value: maxVolumeInOneDay,
-      unit: "kg",
+      title: "平均強度",
+      value: Math.round(averageIntensity * 10) / 10,
+      unit: "",
     },
   ];
 
@@ -316,10 +351,14 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
 
   const handleWorkoutTypeClick = (workoutType: string) => {
     if (selectedWorkoutType === workoutType) {
-      setSelectedWorkoutType(null); // 同じものをクリックした場合は選択解除
+      setSelectedWorkoutType(null);
     } else {
       setSelectedWorkoutType(workoutType);
     }
+  };
+
+  const handleIntensityInfoClick = () => {
+    setIntensityDialogOpen(true);
   };
 
   return (
@@ -391,7 +430,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
           ref={scrollContainerRef}
           sx={{
             display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
+            gridTemplateColumns: "repeat(3, 1fr)",
             gap: 1,
             overflowX: "auto",
             scrollBehavior: "smooth",
@@ -412,6 +451,7 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                position: "relative",
               }}
             >
               <CardContent sx={{ textAlign: "center", width: "100%" }}>
@@ -441,6 +481,27 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
                     {stat.unit}
                   </Typography>
                 </Typography>
+                {/* 強度関連の統計にのみ「？」アイコンを表示 */}
+                {(stat.title === "総強度" || stat.title === "平均強度") && (
+                  <IconButton
+                    size="small"
+                    onClick={handleIntensityInfoClick}
+                    sx={{
+                      position: "absolute",
+                      top: 4,
+                      right: 4,
+                      width: 20,
+                      height: 20,
+                      bgcolor: "primary.main",
+                      color: "primary.contrastText",
+                      "&:hover": {
+                        bgcolor: "primary.dark",
+                      },
+                    }}
+                  >
+                    <HelpIcon sx={{ fontSize: 12 }} />
+                  </IconButton>
+                )}
               </CardContent>
             </Card>
           ))}
@@ -466,6 +527,50 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
           最終トレーニング: {lastWorkoutDate}
         </Typography>
       </Box>
+
+      <Dialog
+        open={intensityDialogOpen}
+        onClose={() => setIntensityDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            トレーニング強度について
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body1" gutterBottom>
+              強度は以下の計算式で算出されます：
+            </Typography>
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: "grey.500",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                mb: 2,
+              }}
+            >
+              <Typography
+                variant="body1"
+                fontFamily="monospace"
+                color="#000000"
+              >
+                強度 = (重量 / 最大重量) × レップ数
+              </Typography>
+            </Box>
+            <Typography variant="body2" fontWeight="bold">
+              正確な強度計算のためには、各種目の最大重量を記録する必要があります。
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIntensityDialogOpen(false)}>閉じる</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -39,6 +39,7 @@ import {
   SelfImprovement as SelfImprovementIcon,
   AutoAwesome as AutoAwesomeIcon,
   DirectionsBike as DirectionsBikeIcon,
+  Help as HelpIcon,
 } from "@mui/icons-material";
 import { useUserStore } from "@/store/userStore";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -63,6 +64,7 @@ import { WorkoutGraphs } from "./WorkoutGraphs";
 import { WorkoutStats } from "./WorkoutStats";
 import { WorkoutHistory } from "./WorkoutHistory";
 import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
+import { calculateIntensityForDate } from "@/lib/intensityCalculator";
 
 interface FeedProps {
   workouts: WorkoutRecord[];
@@ -153,6 +155,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(false);
   const [isUpdatingRecords, setIsUpdatingRecords] = useState(false);
+  const [intensityDialogOpen, setIntensityDialogOpen] = useState(false);
   const [cachedWorkouts, setCachedWorkouts] = useState<WorkoutRecord[]>([]);
   const [cachedLikes, setCachedLikes] = useState<{ [key: string]: boolean }>(
     {}
@@ -1218,6 +1221,52 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                                   color="secondary"
                                   variant="outlined"
                                 />
+                                {(() => {
+                                  const dailyIntensity =
+                                    calculateIntensityForDate(
+                                      workouts,
+                                      workout.date.toDate()
+                                    );
+                                  return dailyIntensity ? (
+                                    <Box
+                                      sx={{
+                                        position: "relative",
+                                        display: "inline-block",
+                                      }}
+                                    >
+                                      <Chip
+                                        label={`強度: ${
+                                          Math.round(
+                                            dailyIntensity.totalIntensity * 10
+                                          ) / 10
+                                        }`}
+                                        size="small"
+                                        color="success"
+                                        variant="outlined"
+                                      />
+                                      <IconButton
+                                        size="small"
+                                        onClick={() =>
+                                          setIntensityDialogOpen(true)
+                                        }
+                                        sx={{
+                                          position: "absolute",
+                                          top: -6,
+                                          right: -6,
+                                          width: 16,
+                                          height: 16,
+                                          bgcolor: "primary.main",
+                                          color: "primary.contrastText",
+                                          "&:hover": {
+                                            bgcolor: "primary.dark",
+                                          },
+                                        }}
+                                      >
+                                        <HelpIcon sx={{ fontSize: 10 }} />
+                                      </IconButton>
+                                    </Box>
+                                  ) : null;
+                                })()}
                               </Stack>
                             </Box>
 
@@ -1579,6 +1628,50 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleProfileClose}>閉じる</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={intensityDialogOpen}
+        onClose={() => setIntensityDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            トレーニング強度について
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="body1" gutterBottom>
+              強度は以下の計算式で算出されます：
+            </Typography>
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: "grey.500",
+                borderRadius: 1,
+                border: "1px solid",
+                borderColor: "divider",
+                mb: 2,
+              }}
+            >
+              <Typography
+                variant="body1"
+                fontFamily="monospace"
+                color="#000000"
+              >
+                強度 = (重量 / 最大重量) × レップ数
+              </Typography>
+            </Box>
+            <Typography variant="body2" fontWeight="bold">
+              正確な強度計算のためには、各種目の最大重量を記録する必要があります。
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIntensityDialogOpen(false)}>閉じる</Button>
         </DialogActions>
       </Dialog>
     </>

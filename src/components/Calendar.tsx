@@ -411,6 +411,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
             onUpdate={(updatedWorkout) => {
               setSelectedWorkout(updatedWorkout);
             }}
+            allWorkouts={workouts}
           />
         </Box>
       )}

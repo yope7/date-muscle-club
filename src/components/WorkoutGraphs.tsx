@@ -214,7 +214,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
     const unsubscribe = onSnapshot(
       workoutsQuery,
       (snapshot) => {
-        const data = snapshot.docs
+        const rawData = snapshot.docs
           .map((doc) => {
             const workout = doc.data();
 
@@ -234,7 +234,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
             }
 
             return {
-              date: workout.date.toDate().toLocaleDateString("ja-JP"),
+              date: workout.date.toDate(),
               totalSets: filteredSets.length,
               totalReps: filteredSets.reduce(
                 (sum: number, set: any) => sum + set.reps,
@@ -250,10 +250,21 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
               workoutType: selectedWorkoutType || workout.name || "不明",
             };
           })
-          .filter(Boolean) // null値を除外
-          .reverse();
+          .filter((item): item is NonNullable<typeof item> => item !== null) // null値を除外し、型を保証
+          .sort((a, b) => a.date.getTime() - b.date.getTime()); // 日付順にソート
 
-        setWorkoutData(data);
+        // 最大重量を単調増加にする（各時点での最高重量を計算）
+        let currentMaxWeight = 0;
+        const processedData = rawData.map((item) => {
+          currentMaxWeight = Math.max(currentMaxWeight, item.maxWeight);
+          return {
+            ...item,
+            date: item.date.toLocaleDateString("ja-JP"),
+            maxWeight: currentMaxWeight, // 現在までの最高重量
+          };
+        });
+
+        setWorkoutData(processedData);
         setLoading(false);
       },
       (err) => {
@@ -324,7 +335,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
           />
           <Legend />
           <Line
-            type="monotone"
+            type="stepAfter"
             dataKey={dataKey}
             stroke={color}
             name={name}
@@ -422,7 +433,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
         >
           <Tab label="セット数" />
           <Tab label="レップ数" />
-          <Tab label="最大重量" />
+          <Tab label="最高重量" />
           <Tab label="総挙上量" />
           {muscleGroupAnalysis.length > 1 && <Tab label="ワークアウト別" />}
         </Tabs>
@@ -439,7 +450,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
       </TabPanel>
       <TabPanel value={tabValue} index={2}>
         <Box key={`weight-${selectedWorkoutType || "all"}`}>
-          {renderGraph("maxWeight", "#ff7300", "最大重量")}
+          {renderGraph("maxWeight", "#ff7300", "最高重量")}
         </Box>
       </TabPanel>
       <TabPanel value={tabValue} index={3}>

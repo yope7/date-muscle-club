@@ -26,12 +26,17 @@ import { WorkoutRecord } from "@/types/workout";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { Timestamp } from "firebase/firestore";
 import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
+import {
+  calculateSetIntensity,
+  calculateMaxWeights,
+} from "@/lib/intensityCalculator";
 
 interface WorkoutSetsProps {
   workout: WorkoutRecord;
   onDelete?: (workout: WorkoutRecord) => void;
   onAddSet?: () => void;
   onUpdate?: (updatedWorkout: WorkoutRecord) => void;
+  allWorkouts?: WorkoutRecord[]; // 強度計算用の全ワークアウトデータ
 }
 
 export const WorkoutSets = ({
@@ -39,6 +44,7 @@ export const WorkoutSets = ({
   onDelete,
   onAddSet,
   onUpdate,
+  allWorkouts = [],
 }: WorkoutSetsProps) => {
   const { updateWorkout, addWorkout } = useWorkoutStore();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -65,6 +71,17 @@ export const WorkoutSets = ({
   );
   const totalSets = workout.sets.length;
   const workoutDate = workout.date.toDate();
+
+  // 強度計算
+  const maxWeights = calculateMaxWeights(allWorkouts);
+  const workoutIntensities = workout.sets.map((set) => {
+    const workoutType = set.workoutType || workout.name || "不明";
+    return calculateSetIntensity(set, workoutType, maxWeights);
+  });
+  const totalIntensity = workoutIntensities.reduce(
+    (sum, intensity) => sum + intensity.intensity,
+    0
+  );
 
   // ワークアウトタイプの情報を取得するヘルパー関数
   const getWorkoutTypeInfo = (typeName: string) => {
@@ -254,8 +271,6 @@ export const WorkoutSets = ({
             )}
           </Stack>
         </Box>
-
-        <Divider />
 
         {Object.entries(groupedSets).map(([type, sets]) => {
           const typeInfo = getWorkoutTypeInfo(type);
