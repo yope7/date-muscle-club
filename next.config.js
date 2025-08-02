@@ -6,15 +6,11 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  output: 'standalone',
-  distDir: '.next',
+  output: "standalone",
+  distDir: ".next",
   // ページルーティングの設定
-  pageExtensions: ['tsx', 'ts', 'jsx', 'js'],
-  // Pages Routerの設定
-  experimental: {
-    appDir: false
-  },
+  pageExtensions: ["tsx", "ts", "jsx", "js"],
   // 他の設定があればここに追加
 };
 
-module.exports = nextConfig; 
+module.exports = nextConfig;
