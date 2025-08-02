@@ -70,7 +70,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
   const fetchChangelog = async () => {
     try {
       setIsLoading(true);
-      const response = await fetch("/api/changelog");
+      const response = await fetch("/changelog.md");
       if (response.ok) {
         const content = await response.text();
         setChangelogContent(content);
