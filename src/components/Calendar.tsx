@@ -777,12 +777,58 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     saveGroupWorkoutState();
   };
 
-  const handleCancelGroupWorkout = () => {
+  const handleCancelGroupWorkout = async () => {
     setIsGroupWorkout(false);
     setSelectedGroupMembers([]);
     setCancelGroupWorkoutDialogOpen(false);
-    // キャンセル時もDBを更新
-    saveGroupWorkoutState();
+
+    // キャンセル時は直接DBを更新
+    if (selectedDate && user) {
+      const dateKey = format(selectedDate, "yyyy-MM-dd");
+      try {
+        // 日付レベルの合同トレーニング情報を削除
+        await saveDayGroupWorkoutInfo(user.uid, dateKey, {
+          date: dateKey,
+          isGroupWorkout: false,
+          groupMembers: [],
+        });
+
+        // その日の全ワークアウトから合同トレーニング情報を削除
+        const dayWorkouts = workouts.filter(
+          (w) =>
+            w.date instanceof Timestamp &&
+            isValid(w.date.toDate()) &&
+            format(w.date.toDate(), "yyyy-MM-dd") === dateKey
+        );
+
+        for (const workout of dayWorkouts) {
+          await updateWorkout({
+            ...workout,
+            isGroupWorkout: false,
+            groupMembers: [],
+            groupWorkoutName: "",
+          });
+        }
+
+        // 状態を更新
+        setDayGroupWorkoutInfo(null);
+        setHasUnsavedGroupWorkoutChanges(false);
+
+        // 月の合同トレーニング情報も更新
+        const year = getYear(selectedDate);
+        const month = getMonth(selectedDate) + 1;
+        const updatedMonthGroupInfo = await getMonthGroupWorkoutInfo(
+          user.uid,
+          year,
+          month
+        );
+        setMonthGroupWorkoutInfo(updatedMonthGroupInfo);
+
+        console.log("合同トレーニングのキャンセルが完了しました");
+      } catch (error) {
+        console.error("合同トレーニングのキャンセルに失敗しました:", error);
+      }
+    }
   };
 
   // 日付レベルの合同トレーニング情報を保存する関数
