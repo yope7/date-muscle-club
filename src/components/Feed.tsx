@@ -47,6 +47,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
+  Group as GroupIcon,
 } from "@mui/icons-material";
 import { useUserStore } from "@/store/userStore";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -1266,6 +1267,22 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                             color: "warning.contrastText",
                             "& .MuiChip-icon": {
                               color: "warning.contrastText",
+                            },
+                          }}
+                        />
+                      )}
+                      {workout.isGroupWorkout && (
+                        <Chip
+                          icon={<GroupIcon />}
+                          label={workout.groupWorkoutName || "合同トレーニング"}
+                          color="info"
+                          size="small"
+                          sx={{
+                            ml: 1,
+                            backgroundColor: "info.main",
+                            color: "info.contrastText",
+                            "& .MuiChip-icon": {
+                              color: "info.contrastText",
                             },
                           }}
                         />

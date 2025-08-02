@@ -14,9 +14,16 @@ import {
   serverTimestamp,
   writeBatch,
   collectionGroup,
+  setDoc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Workout, WorkoutSet, WorkoutRecord } from "@/types/workout";
+import {
+  Workout,
+  WorkoutSet,
+  WorkoutRecord,
+  DayGroupWorkoutInfo,
+} from "@/types/workout";
 
 // ワークアウトデータの型変換
 const convertWorkoutData = (
@@ -33,6 +40,10 @@ const convertWorkoutData = (
     tags: data.tags || [],
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
+    // 合同トレーニング情報を追加
+    isGroupWorkout: data.isGroupWorkout || false,
+    groupMembers: data.groupMembers || [],
+    groupWorkoutName: data.groupWorkoutName || "",
   };
 };
 
@@ -72,6 +83,19 @@ export const addWorkout = async (
         sets: [...existingWorkout.sets, newSetWithId],
         memo: workout.memo || existingWorkout.memo,
         tags: [...new Set([...existingWorkout.tags, ...workout.tags])],
+        // 合同トレーニング情報を保持（新しい情報がある場合は更新）
+        isGroupWorkout:
+          workout.isGroupWorkout !== undefined
+            ? workout.isGroupWorkout
+            : existingWorkout.isGroupWorkout,
+        groupMembers:
+          workout.groupMembers !== undefined
+            ? workout.groupMembers
+            : existingWorkout.groupMembers,
+        groupWorkoutName:
+          workout.groupWorkoutName !== undefined
+            ? workout.groupWorkoutName
+            : existingWorkout.groupWorkoutName,
         updatedAt: Timestamp.fromDate(new Date()),
       };
       await updateWorkout(updatedWorkout);
@@ -112,13 +136,26 @@ export const updateWorkout = async (workout: WorkoutRecord): Promise<void> => {
   }
   try {
     const workoutRef = doc(db, "users", workout.userId, "workouts", workout.id);
-    await updateDoc(workoutRef, {
+    const updateData: any = {
       name: workout.name,
       sets: workout.sets,
       memo: workout.memo,
       tags: workout.tags,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // 合同トレーニング情報を追加
+    if (workout.isGroupWorkout !== undefined) {
+      updateData.isGroupWorkout = workout.isGroupWorkout;
+    }
+    if (workout.groupMembers !== undefined) {
+      updateData.groupMembers = workout.groupMembers;
+    }
+    if (workout.groupWorkoutName !== undefined) {
+      updateData.groupWorkoutName = workout.groupWorkoutName;
+    }
+
+    await updateDoc(workoutRef, updateData);
   } catch (error) {
     console.error("Error updating workout:", error);
     throw error;
@@ -203,5 +240,104 @@ export const addTestWorkout = async (userId: string): Promise<string> => {
   } catch (error) {
     console.error("テストデータの追加に失敗しました:", error);
     throw error;
+  }
+};
+
+// 日付レベルの合同トレーニング情報を保存
+export const saveDayGroupWorkoutInfo = async (
+  userId: string,
+  date: string,
+  groupWorkoutInfo: Omit<DayGroupWorkoutInfo, "updatedAt">
+): Promise<void> => {
+  try {
+    const dayGroupWorkoutRef = doc(
+      db,
+      "users",
+      userId,
+      "dayGroupWorkouts",
+      date
+    );
+    await setDoc(dayGroupWorkoutRef, {
+      ...groupWorkoutInfo,
+      updatedAt: serverTimestamp(),
+    });
+    console.log(
+      `日付 ${date} の合同トレーニング情報を保存しました:`,
+      groupWorkoutInfo
+    );
+  } catch (error) {
+    console.error("Error saving day group workout info:", error);
+    throw error;
+  }
+};
+
+// 日付レベルの合同トレーニング情報を取得
+export const getDayGroupWorkoutInfo = async (
+  userId: string,
+  date: string
+): Promise<DayGroupWorkoutInfo | null> => {
+  try {
+    const dayGroupWorkoutRef = doc(
+      db,
+      "users",
+      userId,
+      "dayGroupWorkouts",
+      date
+    );
+    const docSnap = await getDoc(dayGroupWorkoutRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return {
+        date: data.date,
+        isGroupWorkout: data.isGroupWorkout,
+        groupMembers: data.groupMembers || [],
+        groupWorkoutName: data.groupWorkoutName,
+        updatedAt: data.updatedAt,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Error getting day group workout info:", error);
+    return null;
+  }
+};
+
+// 月の合同トレーニング情報を一括取得
+export const getMonthGroupWorkoutInfo = async (
+  userId: string,
+  year: number,
+  month: number
+): Promise<DayGroupWorkoutInfo[]> => {
+  try {
+    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+    const endDate = `${year}-${String(month).padStart(2, "0")}-31`;
+
+    const dayGroupWorkoutsRef = collection(
+      db,
+      "users",
+      userId,
+      "dayGroupWorkouts"
+    );
+    const q = query(
+      dayGroupWorkoutsRef,
+      where("date", ">=", startDate),
+      where("date", "<=", endDate)
+    );
+
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        date: data.date,
+        isGroupWorkout: data.isGroupWorkout,
+        groupMembers: data.groupMembers || [],
+        groupWorkoutName: data.groupWorkoutName,
+        updatedAt: data.updatedAt,
+      };
+    });
+  } catch (error) {
+    console.error("Error getting month group workout info:", error);
+    return [];
   }
 };

@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import React from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { Button, Typography, Box, Container } from '@mui/material';
-import GoogleIcon from '@mui/icons-material/Google';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import React from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { Button, Typography, Box, Container } from "@mui/material";
+import GoogleIcon from "@mui/icons-material/Google";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 
 export const LoginForm = () => {
   const { signInWithGoogle, signInAsGuest } = useAuth();
@@ -20,19 +20,19 @@ export const LoginForm = () => {
         gap={3}
       >
         <Typography variant="h3" component="h1" fontWeight="bold" gutterBottom>
-          Date Muscle Club
+          Muscle Club
         </Typography>
-        
+
         <Button
           variant="contained"
           onClick={signInWithGoogle}
           startIcon={<GoogleIcon />}
           size="large"
           sx={{
-            bgcolor: 'lightblue',
-            color: 'black',
-            '&:hover': {
-              bgcolor: 'white',
+            bgcolor: "lightblue",
+            color: "black",
+            "&:hover": {
+              bgcolor: "white",
             },
             px: 4,
             py: 1.5,
@@ -47,9 +47,9 @@ export const LoginForm = () => {
           startIcon={<PersonOutlineIcon />}
           size="large"
           sx={{
-            bgcolor: 'grey.800',
-            '&:hover': {
-              bgcolor: 'grey.700',
+            bgcolor: "grey.800",
+            "&:hover": {
+              bgcolor: "grey.700",
             },
             px: 4,
             py: 1.5,
@@ -57,8 +57,7 @@ export const LoginForm = () => {
         >
           ゲストとして利用
         </Button>
-
       </Box>
     </Container>
   );
-}; 
+};

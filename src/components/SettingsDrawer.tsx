@@ -34,6 +34,7 @@ import {
   PersonAdd as PersonAddIcon,
   People as PeopleIcon,
   Mail as MailIcon,
+  Groups as GroupsIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/hooks/useAuth";
 import { SettingsDialog } from "./SettingsDialog";
@@ -42,6 +43,7 @@ import { InviteFriend } from "./InviteFriend";
 import { useUserStore } from "@/store/userStore";
 import { FriendsList } from "./FriendsList";
 import { InviteList } from "./InviteList";
+import { TeamManagement } from "./TeamManagement";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -55,12 +57,13 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onClose,
 }) => {
   const { user, isGuest, signOut } = useAuth();
-  const { profile, updateProfile } = useUserStore();
+  const { profile } = useUserStore();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [inviteListOpen, setInviteListOpen] = useState(false);
+  const [teamManagementOpen, setTeamManagementOpen] = useState(false);
   const [hasPendingInvites, setHasPendingInvites] = useState(false);
   const { resetData } = useWorkoutStore();
 
@@ -114,6 +117,18 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
 
   const handleInviteListClose = () => {
     setInviteListOpen(false);
+  };
+
+  const handleTeamManagementOpen = () => {
+    if (isGuest) {
+      alert("ゲストユーザーはチーム機能を利用できません。");
+      return;
+    }
+    setTeamManagementOpen(true);
+  };
+
+  const handleTeamManagementClose = () => {
+    setTeamManagementOpen(false);
   };
 
   const handleReset = async () => {
@@ -208,6 +223,16 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             <ListItemText primary="友達を招待" />
           </ListItemButton>
           <Divider />
+          <Typography variant="overline" sx={{ px: 2, py: 1 }}>
+            チーム
+          </Typography>
+          <ListItemButton onClick={handleTeamManagementOpen}>
+            <ListItemIcon>
+              <GroupsIcon />
+            </ListItemIcon>
+            <ListItemText primary="チーム管理" />
+          </ListItemButton>
+          <Divider />
 
           <Typography variant="overline" sx={{ px: 2, py: 1 }}>
             その他
@@ -283,6 +308,20 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         <DialogContent>
           <InviteList onClose={handleInviteListClose} />
         </DialogContent>
+      </Dialog>
+      <Dialog
+        open={teamManagementOpen}
+        onClose={handleTeamManagementClose}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>チーム管理</DialogTitle>
+        <DialogContent>
+          <TeamManagement />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleTeamManagementClose}>閉じる</Button>
+        </DialogActions>
       </Dialog>
     </>
   );

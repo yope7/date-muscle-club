@@ -9,8 +9,8 @@ import { ClientLayout } from "./ClientLayout";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Date Muscle Club - ベンチプレス記録アプリ",
-  description: "あなたのベンチプレストレーニングを記録・可視化するアプリ",
+  title: "Muscle Club - 筋トレ記録アプリ",
+  description: "トレーニングを記録・可視化するアプリ",
 };
 
 export default function RootLayout({

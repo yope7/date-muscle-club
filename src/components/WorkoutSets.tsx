@@ -19,9 +19,12 @@ import {
   Slider,
   Snackbar,
   Alert,
+  Avatar,
 } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddIcon from "@mui/icons-material/Add";
+import GroupIcon from "@mui/icons-material/Group";
+import PersonIcon from "@mui/icons-material/Person";
 import { WorkoutRecord } from "@/types/workout";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { Timestamp } from "firebase/firestore";
@@ -249,6 +252,42 @@ export const WorkoutSets = ({
             <Typography variant="caption" color="text.secondary">
               {format(workoutDate, "M月d日 (E)", { locale: ja })}
             </Typography>
+            {workout.isGroupWorkout && (
+              <Box sx={{ mt: 1 }}>
+                <Chip
+                  icon={<GroupIcon />}
+                  label={workout.groupWorkoutName || "合同トレーニング"}
+                  color="info"
+                  size="small"
+                  sx={{ mb: 1 }}
+                />
+                {workout.groupMembers && workout.groupMembers.length > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    {workout.groupMembers.slice(0, 3).map((memberId, index) => (
+                      <Avatar
+                        key={memberId}
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          fontSize: "0.6rem",
+                          bgcolor: "primary.main",
+                          border: "1px solid white",
+                          zIndex: workout.groupMembers!.length - index,
+                          marginLeft: index > 0 ? -0.5 : 0,
+                        }}
+                      >
+                        {memberId === "あなた" ? "あなた" : "?"}
+                      </Avatar>
+                    ))}
+                    {workout.groupMembers.length > 3 && (
+                      <Typography variant="caption" color="text.secondary">
+                        +{workout.groupMembers.length - 3}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            )}
           </Box>
           <Stack direction="row" spacing={1}>
             <IconButton

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { useTeamStore } from "@/store/teamStore";
 import {
   AppBar,
   Toolbar,
@@ -19,8 +20,10 @@ import {
   Settings as SettingsIcon,
   Menu as MenuIcon,
   AdminPanelSettings as AdminIcon,
+  Notifications as NotificationsIcon,
 } from "@mui/icons-material";
 import { SettingsDialog } from "./SettingsDialog";
+import { TeamInviteList } from "./TeamInviteList";
 import {
   collection,
   query,
@@ -36,10 +39,12 @@ interface HeaderProps {
 }
 
 export const Header = ({ onMenuClick }: HeaderProps) => {
-  const { user, signIn, signOut } = useAuth();
+  const { user, signIn, signOut, isGuest } = useAuth();
+  const { currentTeam, teamInvites, fetchTeamInvites } = useTeamStore();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isTeamInvitesOpen, setIsTeamInvitesOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -67,7 +72,12 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
     };
 
     checkAdminStatus();
-  }, [user]);
+
+    // チーム招待を取得
+    if (user) {
+      fetchTeamInvites(user.uid);
+    }
+  }, [user, fetchTeamInvites]);
 
   return (
     <>
@@ -87,7 +97,9 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
               component="h1"
               fontWeight="bold"
             >
-              Date Muscle Club
+              {user && !isGuest && currentTeam
+                ? `${currentTeam.name} Muscle Club`
+                : "Muscle Club"}
             </Typography>
           </Link>
           <Box sx={{ flexGrow: 1 }} />
@@ -99,6 +111,27 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
             )}
             {user ? (
               <>
+                {teamInvites.length > 0 && (
+                  <IconButton
+                    color="inherit"
+                    onClick={() => setIsTeamInvitesOpen(true)}
+                    aria-label="チーム招待"
+                    sx={{ position: "relative" }}
+                  >
+                    <NotificationsIcon />
+                    <Box
+                      sx={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        backgroundColor: "error.main",
+                      }}
+                    />
+                  </IconButton>
+                )}
                 <IconButton color="inherit" aria-label="マイページ">
                   <Avatar
                     src={user.photoURL || undefined}
@@ -129,6 +162,10 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
       <SettingsDialog
         open={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+      <TeamInviteList
+        open={isTeamInvitesOpen}
+        onClose={() => setIsTeamInvitesOpen(false)}
       />
     </>
   );

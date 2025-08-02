@@ -11,6 +11,8 @@ import {
   addMonths,
   subMonths,
   isValid,
+  getYear,
+  getMonth,
 } from "date-fns";
 import { ja } from "date-fns/locale";
 import {
@@ -31,15 +33,27 @@ import {
   TextField,
   Slider,
   Chip,
+  Avatar,
 } from "@mui/material";
 import {
   ChevronLeft,
   ChevronRight,
   Add as AddIcon,
   ArrowBack,
+  Group as GroupIcon,
+  Check as CheckIcon,
+  Person as PersonIcon,
 } from "@mui/icons-material";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { useSettingsStore } from "@/store/settingsStore";
+import { useTeamStore } from "@/store/teamStore";
+import { useUserStore } from "@/store/userStore";
+import {
+  saveDayGroupWorkoutInfo,
+  getDayGroupWorkoutInfo,
+  getMonthGroupWorkoutInfo,
+} from "@/lib/firestore";
+import { DayGroupWorkoutInfo } from "@/types/workout";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import WhatshotIcon from "@mui/icons-material/Whatshot";
@@ -69,6 +83,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   } = useWorkoutStore();
   const { user } = useAuth();
   const { calendarDisplayMode } = useSettingsStore();
+  const { currentTeam, teamMembers, fetchTeamMembers } = useTeamStore();
+  const { profiles, friends, fetchFriends } = useUserStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loading, setLoading] = useState(true);
   const [monthWorkouts, setMonthWorkouts] = useState<{ [key: string]: number }>(
@@ -85,6 +101,21 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     useState<WorkoutType | null>(null);
   const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
   const [bulkSetCount, setBulkSetCount] = useState(1);
+  // 合同トレーニング関連のstate
+  const [isGroupWorkout, setIsGroupWorkout] = useState(false);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>(
+    []
+  );
+  const [groupWorkoutDialogOpen, setGroupWorkoutDialogOpen] = useState(false);
+  const [hasUnsavedGroupWorkoutChanges, setHasUnsavedGroupWorkoutChanges] =
+    useState(false);
+  const [dayGroupWorkoutInfo, setDayGroupWorkoutInfo] =
+    useState<DayGroupWorkoutInfo | null>(null);
+  const [monthGroupWorkoutInfo, setMonthGroupWorkoutInfo] = useState<
+    DayGroupWorkoutInfo[]
+  >([]);
+  const [cancelGroupWorkoutDialogOpen, setCancelGroupWorkoutDialogOpen] =
+    useState(false);
 
   // Riveアニメーションの設定
   const { RiveComponent, rive } = useRive({
@@ -261,8 +292,24 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
     // 初期化時に現在の月のデータを取得
     const initializeMonthData = async () => {
-      await fetchWorkoutsByMonth(user.uid, currentMonth);
-      setLoading(false);
+      try {
+        await fetchWorkoutsByMonth(user.uid, currentMonth);
+
+        // 月の合同トレーニング情報を取得
+        const year = getYear(currentMonth);
+        const month = getMonth(currentMonth) + 1;
+        const monthGroupInfo = await getMonthGroupWorkoutInfo(
+          user.uid,
+          year,
+          month
+        );
+        setMonthGroupWorkoutInfo(monthGroupInfo);
+
+        setLoading(false);
+      } catch (error) {
+        console.error("月データの初期化に失敗しました:", error);
+        setLoading(false);
+      }
     };
 
     initializeMonthData();
@@ -339,6 +386,16 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
   const dates = eachDayOfInterval({ start: startDate, end: endDate });
 
+  // チームメンバーとフレンドを取得
+  useEffect(() => {
+    if (currentTeam) {
+      fetchTeamMembers(currentTeam.id);
+    }
+    if (user) {
+      fetchFriends(user.uid);
+    }
+  }, [currentTeam, fetchTeamMembers, user, fetchFriends]);
+
   const getDayReps = (date: Date) => {
     if (!isValid(date)) return 0;
     const dateKey = format(date, "yyyy-MM-dd");
@@ -359,12 +416,67 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     return 2;
   };
 
+  // 日付の合同トレーニング情報を取得
+  const fetchDayGroupWorkoutInfo = async (date: Date) => {
+    if (!user) return;
+
+    const dateKey = format(date, "yyyy-MM-dd");
+    try {
+      const info = await getDayGroupWorkoutInfo(user.uid, dateKey);
+      setDayGroupWorkoutInfo(info);
+      console.log(`日付 ${dateKey} の合同トレーニング情報:`, info);
+    } catch (error) {
+      console.error("合同トレーニング情報の取得に失敗:", error);
+    }
+  };
+
+  // 合同トレーニングの相手をアイコンで表示するコンポーネント
+  const GroupWorkoutMembers = ({ members }: { members: string[] }) => {
+    return (
+      <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+        {members.slice(0, 3).map((memberId, index) => (
+          <Avatar
+            key={memberId}
+            sx={{
+              width: 24,
+              height: 24,
+              fontSize: "0.75rem",
+              bgcolor: "primary.main",
+              border: "1px solid white",
+              zIndex: members.length - index,
+              marginLeft: index > 0 ? -1 : 0,
+            }}
+          >
+            {memberId === user?.uid
+              ? "あなた"
+              : profiles[memberId]?.displayName?.charAt(0) || "?"}
+          </Avatar>
+        ))}
+        {members.length > 3 && (
+          <Typography variant="caption" color="text.secondary">
+            +{members.length - 3}
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
   const handlePrevMonth = async () => {
     const newMonth = subMonths(currentMonth, 1);
     setCurrentMonth(newMonth);
     if (user) {
       console.log("=== Prev Month Debug ===");
       await fetchWorkoutsByMonth(user.uid, newMonth);
+
+      // 月の合同トレーニング情報を取得
+      const year = getYear(newMonth);
+      const month = getMonth(newMonth) + 1;
+      const monthGroupInfo = await getMonthGroupWorkoutInfo(
+        user.uid,
+        year,
+        month
+      );
+      setMonthGroupWorkoutInfo(monthGroupInfo);
     }
   };
 
@@ -374,12 +486,28 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     if (user) {
       console.log("=== Next Month Debug ===");
       await fetchWorkoutsByMonth(user.uid, newMonth);
+
+      // 月の合同トレーニング情報を取得
+      const year = getYear(newMonth);
+      const month = getMonth(newMonth) + 1;
+      const monthGroupInfo = await getMonthGroupWorkoutInfo(
+        user.uid,
+        year,
+        month
+      );
+      setMonthGroupWorkoutInfo(monthGroupInfo);
     }
   };
 
   const handleDateClick = async (date: Date) => {
     setSelectedDate(date);
     const dateKey = format(date, "yyyy-MM-dd");
+
+    // 合同トレーニング状態を初期化（後で正しい値に更新される）
+    setIsGroupWorkout(false);
+    setSelectedGroupMembers([]);
+    setHasUnsavedGroupWorkoutChanges(false);
+    setDayGroupWorkoutInfo(null);
 
     // 選択した日付のワークアウトを検索
     const workout = workouts.find(
@@ -425,6 +553,33 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
     if (workout) {
       setSelectedWorkout(workout);
+
+      // その日の合同トレーニング情報を取得して復元
+      if (user) {
+        const dateKey = format(date, "yyyy-MM-dd");
+        try {
+          const info = await getDayGroupWorkoutInfo(user.uid, dateKey);
+          setDayGroupWorkoutInfo(info);
+
+          if (info) {
+            console.log("既存の合同トレーニング情報を復元:", info);
+            setIsGroupWorkout(info.isGroupWorkout);
+            setSelectedGroupMembers(info.groupMembers);
+            setHasUnsavedGroupWorkoutChanges(false);
+          } else {
+            // 合同トレーニング情報がない場合は初期化
+            setIsGroupWorkout(false);
+            setSelectedGroupMembers([]);
+            setHasUnsavedGroupWorkoutChanges(false);
+          }
+        } catch (error) {
+          console.error("合同トレーニング情報の取得に失敗:", error);
+          // エラー時も初期化
+          setIsGroupWorkout(false);
+          setSelectedGroupMembers([]);
+          setHasUnsavedGroupWorkoutChanges(false);
+        }
+      }
     } else {
       // ワークアウトが存在しない場合は新しいワークアウトを作成
       // 選択した日付に現在の時刻を設定
@@ -517,7 +672,21 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       sets: updatedSets,
       updatedAt: Timestamp.fromDate(new Date()),
       name: selectedWorkoutType?.name || "ベンチプレス",
+      // 合同トレーニング情報を追加
+      isGroupWorkout: isGroupWorkout,
+      groupMembers: isGroupWorkout ? selectedGroupMembers : undefined,
+      groupWorkoutName: isGroupWorkout
+        ? currentTeam
+          ? `${currentTeam.name}合同トレーニング`
+          : "フレンド合同トレーニング"
+        : undefined,
     };
+
+    console.log("セット追加時の合同トレーニング情報:", {
+      isGroupWorkout: updatedWorkout.isGroupWorkout,
+      groupMembers: updatedWorkout.groupMembers,
+      groupWorkoutName: updatedWorkout.groupWorkoutName,
+    });
 
     // 一時的なIDの場合は新規作成、そうでなければ更新
     if (selectedWorkout.id && !selectedWorkout.id.startsWith("temp_")) {
@@ -528,6 +697,14 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
     setSelectedWorkout(updatedWorkout);
     setSnackbarOpen(true);
+
+    // 合同トレーニングが有効な場合、その日の全ワークアウトに合同トレーニング情報を適用
+    if (isGroupWorkout && selectedGroupMembers.length > 0) {
+      console.log("セット追加後に合同トレーニング情報を全ワークアウトに適用");
+      setTimeout(() => {
+        saveGroupWorkoutState();
+      }, 100);
+    }
   };
 
   const handleCloseSnackbar = () => {
@@ -537,6 +714,162 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const handleWorkoutTypeSelect = (workoutType: WorkoutType) => {
     setSelectedWorkoutType(workoutType);
     setAddSetDialogOpen(true);
+  };
+
+  // 合同トレーニング関連のハンドラー
+  const handleGroupWorkoutToggle = () => {
+    if (isGroupWorkout) {
+      // 合同トレーニングをキャンセルする場合は確認ダイアログを表示
+      setCancelGroupWorkoutDialogOpen(true);
+    } else {
+      // 合同トレーニングを開始する場合はメンバー選択ダイアログを表示
+      setGroupWorkoutDialogOpen(true);
+    }
+  };
+
+  // 合同トレーニング状態の変更を監視して未保存状態を管理
+  useEffect(() => {
+    if (!selectedDate) return;
+
+    const currentState = {
+      isGroupWorkout,
+      groupMembers: selectedGroupMembers,
+    };
+
+    const savedState = dayGroupWorkoutInfo
+      ? {
+          isGroupWorkout: dayGroupWorkoutInfo.isGroupWorkout,
+          groupMembers: dayGroupWorkoutInfo.groupMembers,
+        }
+      : {
+          isGroupWorkout: false,
+          groupMembers: [],
+        };
+
+    const hasChanges =
+      currentState.isGroupWorkout !== savedState.isGroupWorkout ||
+      JSON.stringify(currentState.groupMembers) !==
+        JSON.stringify(savedState.groupMembers);
+
+    console.log("合同トレーニング状態の変更を監視:", {
+      selectedDate: format(selectedDate, "yyyy-MM-dd"),
+      currentState,
+      savedState,
+      hasChanges,
+      dayGroupWorkoutInfo,
+    });
+
+    setHasUnsavedGroupWorkoutChanges(hasChanges);
+  }, [isGroupWorkout, selectedGroupMembers, selectedDate, dayGroupWorkoutInfo]);
+
+  const handleGroupMemberToggle = (memberId: string) => {
+    setSelectedGroupMembers((prev) =>
+      prev.includes(memberId)
+        ? prev.filter((id) => id !== memberId)
+        : [...prev, memberId]
+    );
+  };
+
+  const handleGroupWorkoutConfirm = () => {
+    setGroupWorkoutDialogOpen(false);
+    // 確定ボタンを押したタイミングでDBを更新
+    console.log("合同トレーニング確定ボタンが押されました");
+    saveGroupWorkoutState();
+  };
+
+  const handleCancelGroupWorkout = () => {
+    setIsGroupWorkout(false);
+    setSelectedGroupMembers([]);
+    setCancelGroupWorkoutDialogOpen(false);
+    // キャンセル時もDBを更新
+    saveGroupWorkoutState();
+  };
+
+  // 日付レベルの合同トレーニング情報を保存する関数
+  const saveGroupWorkoutState = async () => {
+    if (!selectedDate || !user) return;
+
+    const dateKey = format(selectedDate, "yyyy-MM-dd");
+    const groupWorkoutName = isGroupWorkout
+      ? currentTeam
+        ? `${currentTeam.name}合同トレーニング`
+        : "フレンド合同トレーニング"
+      : undefined;
+
+    console.log("日付レベルの合同トレーニング情報を保存:", {
+      date: dateKey,
+      isGroupWorkout,
+      selectedGroupMembers,
+      groupWorkoutName,
+    });
+
+    try {
+      // 日付レベルの合同トレーニング情報を保存
+      await saveDayGroupWorkoutInfo(user.uid, dateKey, {
+        date: dateKey,
+        isGroupWorkout,
+        groupMembers: selectedGroupMembers,
+        groupWorkoutName,
+      });
+
+      // その日の全ワークアウトにも合同トレーニング情報を適用
+      const dayWorkouts = workouts.filter(
+        (w) =>
+          w.date instanceof Timestamp &&
+          isValid(w.date.toDate()) &&
+          format(w.date.toDate(), "yyyy-MM-dd") === dateKey
+      );
+
+      if (dayWorkouts.length > 0) {
+        console.log("その日の全ワークアウトに合同トレーニング情報を適用:", {
+          workoutCount: dayWorkouts.length,
+        });
+
+        const updatePromises = dayWorkouts.map(async (workout) => {
+          const updatedWorkout: WorkoutRecord = {
+            ...workout,
+            isGroupWorkout: isGroupWorkout,
+            groupMembers: isGroupWorkout ? selectedGroupMembers : undefined,
+            groupWorkoutName,
+            updatedAt: Timestamp.fromDate(new Date()),
+          };
+
+          await updateWorkout(updatedWorkout);
+        });
+
+        await Promise.all(updatePromises);
+        console.log("その日の全ワークアウトの更新が完了しました");
+      }
+
+      // 合同トレーニング情報を再取得して状態を更新
+      const updatedInfo = await getDayGroupWorkoutInfo(user.uid, dateKey);
+      setDayGroupWorkoutInfo(updatedInfo);
+
+      // 状態を確実に更新
+      if (updatedInfo) {
+        setIsGroupWorkout(updatedInfo.isGroupWorkout);
+        setSelectedGroupMembers(updatedInfo.groupMembers);
+      } else {
+        setIsGroupWorkout(false);
+        setSelectedGroupMembers([]);
+      }
+
+      setHasUnsavedGroupWorkoutChanges(false);
+
+      // 月の合同トレーニング情報も更新
+      const year = getYear(selectedDate);
+      const month = getMonth(selectedDate) + 1;
+      const updatedMonthGroupInfo = await getMonthGroupWorkoutInfo(
+        user.uid,
+        year,
+        month
+      );
+      setMonthGroupWorkoutInfo(updatedMonthGroupInfo);
+
+      console.log("合同トレーニング情報の保存が完了しました");
+    } catch (error) {
+      console.error("合同トレーニング情報の保存に失敗しました:", error);
+    }
   };
 
   if (loading || isLoading) {
@@ -673,6 +1006,33 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                   />
                 )
               )}
+
+              {/* 合同トレーニングのマーク */}
+              {(() => {
+                // その日の合同トレーニング情報を確認
+                const dateKey = format(date, "yyyy-MM-dd");
+
+                // 月の合同トレーニング情報から該当する日付を検索
+                const currentMonthGroupWorkoutInfo =
+                  monthGroupWorkoutInfo || [];
+                const dayGroupInfo = currentMonthGroupWorkoutInfo.find(
+                  (info: DayGroupWorkoutInfo) => info.date === dateKey
+                );
+
+                const hasGroupWorkout = dayGroupInfo?.isGroupWorkout || false;
+
+                return hasGroupWorkout ? (
+                  <GroupIcon
+                    sx={{
+                      position: "absolute",
+                      top: { xs: 2, sm: 4 },
+                      right: { xs: 2, sm: 4 },
+                      color: theme.palette.info.main,
+                      fontSize: { xs: "0.75rem", sm: "1rem" },
+                    }}
+                  />
+                ) : null;
+              })()}
             </Box>
           );
         })}
@@ -680,6 +1040,59 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
       {selectedWorkout && (
         <Box sx={{ mt: { xs: 2, sm: 3 } }}>
+          {/* 合同トレーニング選択ボタン */}
+          {selectedWorkout &&
+          ((currentTeam && teamMembers.length > 0) ||
+            (friends && friends.length > 0)) ? (
+            <Box sx={{ mb: 2 }}>
+              <Button
+                variant={isGroupWorkout ? "contained" : "outlined"}
+                startIcon={<GroupIcon />}
+                onClick={handleGroupWorkoutToggle}
+                color={isGroupWorkout ? "primary" : "inherit"}
+                sx={{ mb: 1 }}
+              >
+                {isGroupWorkout ? "合同トレーニング" : "合同トレーニング"}
+                {hasUnsavedGroupWorkoutChanges && (
+                  <Chip
+                    label="未保存"
+                    size="small"
+                    color="warning"
+                    sx={{ ml: 1, fontSize: "0.7rem" }}
+                  />
+                )}
+              </Button>
+              {isGroupWorkout && selectedGroupMembers.length > 0 && (
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}
+                >
+                  <Typography variant="body2" color="text.secondary">
+                    参加メンバー:
+                  </Typography>
+                  <GroupWorkoutMembers members={selectedGroupMembers} />
+                </Box>
+              )}
+              {isGroupWorkout && selectedGroupMembers.length > 0 && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    参加メンバー: {selectedGroupMembers.length}人
+                  </Typography>
+                  {hasUnsavedGroupWorkoutChanges && (
+                    <Button
+                      size="small"
+                      variant="contained"
+                      color="warning"
+                      onClick={saveGroupWorkoutState}
+                      sx={{ ml: 1 }}
+                    >
+                      保存
+                    </Button>
+                  )}
+                </Box>
+              )}
+            </Box>
+          ) : null}
+
           <WorkoutSets
             workout={selectedWorkout}
             onDelete={async (workout) => {
@@ -864,6 +1277,158 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           </Button>
           <Button onClick={handleAddSet} variant="contained">
             {bulkSetCount === 1 ? "追加" : `${bulkSetCount}セット追加`}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 合同トレーニングメンバー選択ダイアログ */}
+      <Dialog
+        open={groupWorkoutDialogOpen}
+        onClose={() => setGroupWorkoutDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <GroupIcon sx={{ mr: 1 }} />
+            合同トレーニングメンバーを選択
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            一緒にトレーニングするメンバーを選択してください
+          </Typography>
+          <Stack spacing={1}>
+            {/* 重複を除去した候補リスト */}
+            {(() => {
+              // チームメンバーとフレンドを統合して重複を除去
+              const allCandidates = new Map<
+                string,
+                { id: string; name: string; type: "team" | "friend" }
+              >();
+
+              // チームメンバーを追加
+              teamMembers.forEach((member) => {
+                const name =
+                  member.userId === user?.uid
+                    ? "あなた"
+                    : profiles[member.userId]?.displayName ||
+                      profiles[member.userId]?.username ||
+                      `メンバー ${member.userId}`;
+                allCandidates.set(member.userId, {
+                  id: member.userId,
+                  name,
+                  type: "team",
+                });
+              });
+
+              // フレンドを追加（重複しない場合のみ）
+              friends.forEach((friend) => {
+                if (!allCandidates.has(friend.id)) {
+                  const name =
+                    friend.id === user?.uid
+                      ? "あなた"
+                      : friend.displayName || `フレンド ${friend.id}`;
+                  allCandidates.set(friend.id, {
+                    id: friend.id,
+                    name,
+                    type: "friend",
+                  });
+                }
+              });
+
+              const candidates = Array.from(allCandidates.values());
+
+              return candidates.map((candidate) => (
+                <Box
+                  key={`candidate-${candidate.id}`}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    p: 1,
+                    border: "1px solid",
+                    borderColor: selectedGroupMembers.includes(candidate.id)
+                      ? "primary.main"
+                      : "divider",
+                    borderRadius: 1,
+                    cursor: "pointer",
+                    bgcolor: selectedGroupMembers.includes(candidate.id)
+                      ? "primary.light"
+                      : "transparent",
+                  }}
+                  onClick={() => handleGroupMemberToggle(candidate.id)}
+                >
+                  <CheckIcon
+                    sx={{
+                      mr: 1,
+                      color: selectedGroupMembers.includes(candidate.id)
+                        ? "primary.main"
+                        : "transparent",
+                    }}
+                  />
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Typography>{candidate.name}</Typography>
+                    <Chip
+                      label={candidate.type === "team" ? "チーム" : "フレンド"}
+                      size="small"
+                      variant="outlined"
+                      sx={{ fontSize: "0.7rem", height: "20px" }}
+                    />
+                  </Box>
+                </Box>
+              ));
+            })()}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setGroupWorkoutDialogOpen(false)}>
+            キャンセル
+          </Button>
+          <Button onClick={handleGroupWorkoutConfirm} variant="contained">
+            確定
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 合同トレーニングキャンセル確認ダイアログ */}
+      <Dialog
+        open={cancelGroupWorkoutDialogOpen}
+        onClose={() => setCancelGroupWorkoutDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: "flex", alignItems: "center" }}>
+            <GroupIcon sx={{ mr: 1 }} />
+            合同トレーニングのキャンセル
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            合同トレーニングをキャンセルしますか？
+          </Typography>
+          {selectedGroupMembers.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                現在の参加メンバー:
+              </Typography>
+              <GroupWorkoutMembers members={selectedGroupMembers} />
+            </Box>
+          )}
+          <Typography variant="body2" color="text.secondary">
+            この操作により、合同トレーニングの設定が削除されます。
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelGroupWorkoutDialogOpen(false)}>
+            キャンセル
+          </Button>
+          <Button
+            onClick={handleCancelGroupWorkout}
+            variant="contained"
+            color="error"
+          >
+            合同トレーニングをキャンセル
           </Button>
         </DialogActions>
       </Dialog>
