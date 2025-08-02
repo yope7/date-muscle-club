@@ -35,7 +35,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
-import WorkoutForm from "@/components/WorkoutForm";
+
 import { Calendar } from "@/components/Calendar";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { format, isSameDay } from "date-fns";
@@ -85,7 +85,8 @@ function TabPanel(props: TabPanelProps) {
 
 export default function Home() {
   const { user, signOut, isGuest, signInWithGoogle } = useAuth();
-  const { workouts, fetchWorkouts, selectedDate } = useWorkoutStore();
+  const { feedWorkouts, fetchWorkouts, selectedDate, isLoading } =
+    useWorkoutStore();
   const { isDrawerOpen } = useDrawerStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,41 +103,10 @@ export default function Home() {
       return;
     }
 
-    const q = query(
-      collection(db, "users", user.uid, "workouts"),
-      orderBy("date", "desc")
-    );
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const workoutData: WorkoutRecord[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          workoutData.push({
-            id: doc.id,
-            userId: data.userId,
-            date: data.date,
-            sets: data.sets,
-            memo: data.memo || "",
-            tags: data.tags || [],
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-            name: data.name || "ワークアウト",
-          });
-        });
-        setLocalWorkouts(workoutData);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching workouts:", error);
-        setError("データの取得中にエラーが発生しました");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
+    // 初期化時はフィード用のデータを取得
+    fetchWorkouts(user.uid);
+    setLoading(false);
+  }, [user, fetchWorkouts]);
 
   useEffect(() => {
     if (!user) {
@@ -145,6 +115,7 @@ export default function Home() {
     }
 
     fetchProfile(user.uid);
+    // フィード用のデータを取得
     fetchWorkouts(user.uid);
   }, [user, fetchProfile, fetchWorkouts]);
 
@@ -288,7 +259,7 @@ export default function Home() {
               </Box>
             ) : (
               <Feed
-                workouts={workouts}
+                workouts={feedWorkouts}
                 onRefresh={async () => {
                   if (user) {
                     await fetchWorkouts(user.uid);

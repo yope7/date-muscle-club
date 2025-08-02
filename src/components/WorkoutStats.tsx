@@ -157,7 +157,8 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
   const averageIntensity =
     getAverageIntensityExcludingNullDays(filteredWorkouts);
   const maxWeights = calculateMaxWeights(filteredWorkouts);
-  const daysSinceFirstWorkout = getDaysSinceFirstWorkout(filteredWorkouts);
+  // 初日からの経過日数は全データで計算（フィルタリングに影響されない）
+  const daysSinceFirstWorkout = getDaysSinceFirstWorkout(workouts);
 
   const lastWorkout = filteredWorkouts[0];
   const lastWorkoutDate = lastWorkout

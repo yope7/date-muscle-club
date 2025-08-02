@@ -37,10 +37,7 @@ export const WorkoutStoreProvider = ({
       return;
     }
 
-    const q = query(
-      collection(db, "workouts"),
-      where("userId", "==", user.uid)
-    );
+    const q = query(collection(db, "users", user.uid, "workouts"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const workoutData = snapshot.docs.map((doc) => {

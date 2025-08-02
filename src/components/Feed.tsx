@@ -22,6 +22,10 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Collapse,
+  Card,
+  CardContent,
+  CardActions,
 } from "@mui/material";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -40,6 +44,9 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   DirectionsBike as DirectionsBikeIcon,
   Help as HelpIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  KeyboardArrowDown as KeyboardArrowDownIcon,
 } from "@mui/icons-material";
 import { useUserStore } from "@/store/userStore";
 import { useWorkoutStore } from "@/store/workoutStore";
@@ -67,7 +74,7 @@ import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 import { calculateIntensityForDate } from "@/lib/intensityCalculator";
 
 interface FeedProps {
-  workouts: WorkoutRecord[];
+  workouts: WorkoutRecord[]; // このpropsは実際には使用されず、feedWorkoutsが使用される
   onRefresh?: () => Promise<void>;
 }
 
@@ -150,8 +157,17 @@ const getRandomElement = <T,>(array: T[]): T => {
 export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const { user } = useAuth();
   const { profile, fetchProfile, friends, fetchFriends } = useUserStore();
-  const { friendWorkouts, fetchFriendWorkouts, isLoading, error } =
-    useWorkoutStore();
+  const {
+    feedWorkouts,
+    friendWorkouts,
+    fetchFriendWorkouts,
+    fetchWorkouts,
+    isLoading,
+    isLoadingMore,
+    hasMoreWorkouts,
+    loadMoreWorkouts,
+    error,
+  } = useWorkoutStore();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingWorkouts, setIsLoadingWorkouts] = useState(false);
   const [isUpdatingRecords, setIsUpdatingRecords] = useState(false);
@@ -209,20 +225,56 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [expandedWorkouts, setExpandedWorkouts] = useState<{
+    [key: string]: boolean;
+  }>({});
 
-  // workoutsとfriendWorkoutsの変更を監視してキャッシュを更新
+  // 折りたたみ状態を切り替える関数
+  const toggleWorkoutExpansion = (workoutId: string) => {
+    setExpandedWorkouts((prev) => ({
+      ...prev,
+      [workoutId]: !prev[workoutId],
+    }));
+  };
+
+  // さらに読み込むボタンのハンドラー
+  const handleLoadMore = async () => {
+    if (!user || isLoadingMore || !hasMoreWorkouts) return;
+    await loadMoreWorkouts(user.uid);
+  };
+
+  // feedWorkoutsとfriendWorkoutsの変更を監視してキャッシュを更新（最適化）
   useEffect(() => {
-    if (workouts.length > 0 || friendWorkouts.length > 0) {
-      const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
+    if (feedWorkouts.length > 0 || friendWorkouts.length > 0) {
+      // 重複を除去してからソート
+      const combinedWorkouts = [...feedWorkouts, ...friendWorkouts];
+      const uniqueWorkouts = combinedWorkouts.filter(
+        (workout, index, self) =>
+          index === self.findIndex((w) => w.id === workout.id)
+      );
+
+      const updatedWorkouts = uniqueWorkouts.sort(
         (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
       );
+
       setCachedWorkouts(updatedWorkouts);
       setCachedLikes(likes);
       setCachedLikeCounts(likeCounts);
       setCachedLikeUsers(likeUsers);
       setCachedComments(comments);
+
+      // 新しいワークアウトは自動展開しない（折りたたみ状態で表示）
+      setExpandedWorkouts((prev) => {
+        const newExpandedState: { [key: string]: boolean } = {};
+        updatedWorkouts.forEach((workout) => {
+          // 既に展開状態が設定されている場合はそのまま、そうでなければ折りたたみ
+          newExpandedState[workout.id] =
+            prev[workout.id] !== undefined ? prev[workout.id] : false; // 新しいワークアウトは折りたたみ状態で表示
+        });
+        return newExpandedState;
+      });
     }
-  }, [workouts, friendWorkouts, likes, likeCounts, likeUsers, comments]);
+  }, [feedWorkouts, friendWorkouts, likes, likeCounts, likeUsers, comments]); // expandedWorkoutsを依存配列から削除
 
   const handleRefresh = async () => {
     if (!onRefresh) return;
@@ -232,10 +284,20 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
       await new Promise((resolve) => setTimeout(resolve, 500));
       await onRefresh();
       // 更新後にデータをキャッシュに保存
-      const updatedWorkouts = [...workouts, ...friendWorkouts].sort(
+      const updatedWorkouts = [...feedWorkouts, ...friendWorkouts].sort(
         (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
       );
       setCachedWorkouts(updatedWorkouts);
+
+      // リフレッシュ時も展開状態を維持
+      const newExpandedState: { [key: string]: boolean } = {};
+      updatedWorkouts.forEach((workout) => {
+        newExpandedState[workout.id] =
+          expandedWorkouts[workout.id] !== undefined
+            ? expandedWorkouts[workout.id]
+            : false; // 新しいワークアウトは折りたたみ状態で表示
+      });
+      setExpandedWorkouts(newExpandedState);
     } finally {
       setIsRefreshing(false);
     }
@@ -244,49 +306,9 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
   useEffect(() => {
     if (!user) return;
 
-    const fetchWorkouts = async () => {
-      // キャッシュにデータがない場合のみデータを取得
-      if (cachedWorkouts.length === 0) {
-        setIsLoadingWorkouts(true);
-        try {
-          const workoutsQuery = query(
-            collection(db, "workouts"),
-            where("userId", "==", user.uid)
-          );
-          const snapshot = await getDocs(workoutsQuery);
-          const workoutData = snapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              userId: data.userId,
-              name: data.name,
-              date: data.date,
-              sets: data.sets || [],
-              memo: data.memo || "",
-              tags: data.tags || [],
-              createdAt: data.createdAt,
-              updatedAt: data.updatedAt,
-              type: data.type,
-              isNewRecord: Boolean(data.isNewRecord),
-            } as WorkoutRecord;
-          });
-
-          // データをキャッシュに保存
-          setCachedWorkouts(
-            [...workoutData, ...friendWorkouts].sort(
-              (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
-            )
-          );
-        } catch (error) {
-          console.error("Error fetching workouts:", error);
-        } finally {
-          setIsLoadingWorkouts(false);
-        }
-      }
-    };
-
-    fetchWorkouts();
-  }, [user, friendWorkouts]);
+    // workoutStoreからデータを取得
+    fetchWorkouts(user.uid);
+  }, [user, fetchWorkouts]);
 
   useEffect(() => {
     if (user) {
@@ -329,13 +351,27 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     };
   }, [user]);
 
-  // 各投稿のいいね数とユーザー情報を取得
+  // 各投稿のいいね数とユーザー情報を取得（最適化）
   useEffect(() => {
-    const allWorkouts = [...workouts, ...friendWorkouts];
-    allWorkouts.forEach(async (workout) => {
+    const allWorkouts = [...feedWorkouts, ...friendWorkouts];
+    const workoutIds = allWorkouts.map((w) => w.id);
+
+    // 既に監視中のワークアウトIDを取得
+    const currentWatchedIds = Object.keys(likeCounts);
+
+    // 新しいワークアウトのみを監視対象に追加
+    const newWorkoutIds = workoutIds.filter(
+      (id) => !currentWatchedIds.includes(id)
+    );
+
+    if (newWorkoutIds.length === 0) return;
+
+    const unsubscribes: (() => void)[] = [];
+
+    newWorkoutIds.forEach((workoutId) => {
       const likesQuery = query(
         collection(db, "likes"),
-        where("workoutId", "==", workout.id)
+        where("workoutId", "==", workoutId)
       );
 
       const unsubscribe = onSnapshot(likesQuery, (snapshot) => {
@@ -355,34 +391,53 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
         setLikeCounts((prev) => ({
           ...prev,
-          [workout.id]: users.length,
+          [workoutId]: users.length,
         }));
         setCachedLikeCounts((prev) => ({
           ...prev,
-          [workout.id]: users.length,
+          [workoutId]: users.length,
         }));
 
         setLikeUsers((prev) => ({
           ...prev,
-          [workout.id]: users,
+          [workoutId]: users,
         }));
         setCachedLikeUsers((prev) => ({
           ...prev,
-          [workout.id]: users,
+          [workoutId]: users,
         }));
       });
 
-      return () => unsubscribe();
+      unsubscribes.push(unsubscribe);
     });
-  }, [workouts, friendWorkouts]);
 
-  // 各投稿のコメントを取得
+    // クリーンアップ関数
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [feedWorkouts, friendWorkouts]); // likeCountsを依存配列から削除
+
+  // 各投稿のコメントを取得（最適化）
   useEffect(() => {
-    const allWorkouts = [...workouts, ...friendWorkouts];
-    allWorkouts.forEach(async (workout) => {
+    const allWorkouts = [...feedWorkouts, ...friendWorkouts];
+    const workoutIds = allWorkouts.map((w) => w.id);
+
+    // 既に監視中のワークアウトIDを取得
+    const currentWatchedIds = Object.keys(comments);
+
+    // 新しいワークアウトのみを監視対象に追加
+    const newWorkoutIds = workoutIds.filter(
+      (id) => !currentWatchedIds.includes(id)
+    );
+
+    if (newWorkoutIds.length === 0) return;
+
+    const unsubscribes: (() => void)[] = [];
+
+    newWorkoutIds.forEach((workoutId) => {
       const commentsQuery = query(
         collection(db, "comments"),
-        where("workoutId", "==", workout.id)
+        where("workoutId", "==", workoutId)
       );
 
       const unsubscribe = onSnapshot(commentsQuery, (snapshot) => {
@@ -413,27 +468,40 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
         setComments((prev) => ({
           ...prev,
-          [workout.id]: comments,
+          [workoutId]: comments,
         }));
         setCachedComments((prev) => ({
           ...prev,
-          [workout.id]: comments,
+          [workoutId]: comments,
         }));
       });
 
-      return () => unsubscribe();
+      unsubscribes.push(unsubscribe);
     });
-  }, [workouts, friendWorkouts]);
 
-  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート
+    // クリーンアップ関数
+    return () => {
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [feedWorkouts, friendWorkouts]); // commentsを依存配列から削除
+
+  // 自分のワークアウトとフレンドのワークアウトを結合して日付順にソート（重複除去）
   const allWorkouts = React.useMemo(() => {
     if (cachedWorkouts.length > 0) {
       return cachedWorkouts;
     }
-    return [...workouts, ...friendWorkouts].sort(
+
+    // 重複を除去してからソート
+    const combinedWorkouts = [...feedWorkouts, ...friendWorkouts];
+    const uniqueWorkouts = combinedWorkouts.filter(
+      (workout, index, self) =>
+        index === self.findIndex((w) => w.id === workout.id)
+    );
+
+    return uniqueWorkouts.sort(
       (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
     );
-  }, [workouts, friendWorkouts, cachedWorkouts]);
+  }, [cachedWorkouts]); // feedWorkouts, friendWorkoutsを依存配列から削除（cachedWorkoutsに依存）
 
   // いいねとコメントの情報を取得
   const getWorkoutInteractions = (workoutId: string) => {
@@ -523,8 +591,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
 
           // 過去の最高記録を取得
           const previousWorkoutsQuery = query(
-            collection(db, "workouts"),
-            where("userId", "==", workout.userId),
+            collection(db, "users", workout.userId, "workouts"),
             where("date", "<", workout.date)
           );
           const previousWorkouts = await getDocs(previousWorkoutsQuery);
@@ -548,7 +615,13 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           if (isNewRecord) {
             try {
               // ドキュメントの存在確認
-              const workoutRef = doc(db, "workouts", workoutId);
+              const workoutRef = doc(
+                db,
+                "users",
+                workout.userId,
+                "workouts",
+                workoutId
+              );
               const workoutDoc = await getDoc(workoutRef);
 
               if (workoutDoc.exists()) {
@@ -576,14 +649,14 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     };
 
     // 最新のワークアウトを取得
-    const latestWorkout = [...workouts, ...friendWorkouts].sort(
+    const latestWorkout = [...feedWorkouts, ...friendWorkouts].sort(
       (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
     )[0];
 
     if (latestWorkout) {
       postSystemCommentForNewWorkout(latestWorkout.id, latestWorkout);
     }
-  }, [workouts.length]); // 依存配列をworkouts.lengthのみに変更
+  }, [feedWorkouts.length]); // 依存配列をfeedWorkouts.lengthのみに変更
 
   const handleLike = async (workoutId: string) => {
     if (!user) return;
@@ -748,7 +821,8 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
     );
   };
 
-  // 既存のフィードの最高記録を更新する関数
+  // 既存のフィードの最高記録を更新する関数（一時的に無効化）
+  /*
   const updateExistingRecords = async () => {
     setIsUpdatingRecords(true);
     try {
@@ -821,8 +895,10 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
       setIsUpdatingRecords(false);
     }
   };
+  */
 
-  // 既存のワークアウトの時刻を修正する関数
+  // 既存のワークアウトの時刻を修正する関数（一時的に無効化）
+  /*
   const fixWorkoutTimes = async () => {
     setIsUpdatingRecords(true);
     try {
@@ -876,6 +952,7 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
       setIsUpdatingRecords(false);
     }
   };
+  */
 
   const handleProfileClick = (userId: string) => {
     setSelectedProfile(userId);
@@ -1103,29 +1180,29 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
           {allWorkouts.map((workout, index) => {
             const userInfo = getUserInfo(workout.userId);
             const interactions = getWorkoutInteractions(workout.id);
+            const isExpanded = expandedWorkouts[workout.id] || false;
+            const stats = calculateWorkoutStats(workout);
+
             return (
               <React.Fragment key={workout.id}>
-                <Paper
+                <Card
                   sx={{
                     mb: 2,
                     borderRadius: 2,
                     overflow: "hidden",
+                    boxShadow: 2,
+                    "&:hover": {
+                      boxShadow: 4,
+                    },
                   }}
                 >
-                  <ListItem
-                    alignItems="flex-start"
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      p: 2,
-                    }}
-                  >
+                  {/* ヘッダー部分（常に表示） */}
+                  <CardContent sx={{ pb: 1 }}>
                     <Box
                       sx={{
-                        width: "100%",
                         display: "flex",
                         alignItems: "center",
-                        mb: 1,
+                        mb: 2,
                       }}
                     >
                       <ListItemAvatar>
@@ -1195,239 +1272,78 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                       )}
                     </Box>
 
-                    <Box sx={{ width: "100%", mb: 2 }}>
-                      {(() => {
-                        const stats = calculateWorkoutStats(workout);
-
-                        return (
-                          <Box>
-                            {/* ワークアウト概要 */}
-                            <Box sx={{ mb: 2 }}>
-                              <Stack
-                                direction="row"
-                                spacing={1}
-                                alignItems="center"
-                                sx={{ mb: 1 }}
-                              >
-                                <Chip
-                                  label={`${stats.workoutTypes}種目`}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                />
-                                <Chip
-                                  label={`${stats.totalSets}セット`}
-                                  size="small"
-                                  color="secondary"
-                                  variant="outlined"
-                                />
-                                {(() => {
-                                  const dailyIntensity =
-                                    calculateIntensityForDate(
-                                      workouts,
-                                      workout.date.toDate()
-                                    );
-                                  return dailyIntensity ? (
-                                    <Box
-                                      sx={{
-                                        position: "relative",
-                                        display: "inline-block",
-                                      }}
-                                    >
-                                      <Chip
-                                        label={`強度: ${
-                                          Math.round(
-                                            dailyIntensity.totalIntensity * 10
-                                          ) / 10
-                                        }`}
-                                        size="small"
-                                        color="success"
-                                        variant="outlined"
-                                      />
-                                      <IconButton
-                                        size="small"
-                                        onClick={() =>
-                                          setIntensityDialogOpen(true)
-                                        }
-                                        sx={{
-                                          position: "absolute",
-                                          top: -6,
-                                          right: -6,
-                                          width: 16,
-                                          height: 16,
-                                          bgcolor: "primary.main",
-                                          color: "primary.contrastText",
-                                          "&:hover": {
-                                            bgcolor: "primary.dark",
-                                          },
-                                        }}
-                                      >
-                                        <HelpIcon sx={{ fontSize: 10 }} />
-                                      </IconButton>
-                                    </Box>
-                                  ) : null;
-                                })()}
-                              </Stack>
-                            </Box>
-
-                            {/* ワークアウトタイプ別の詳細 */}
-                            {stats.groupedSets.map((group, groupIndex) => {
-                              const typeInfo = getWorkoutTypeInfo(group.type);
-                              return (
-                                <Box
-                                  key={groupIndex}
-                                  sx={{
-                                    mb: 2,
-                                    p: 2,
-                                    borderRadius: 2,
-                                    border: `1px solid`,
-                                    borderColor: `${typeInfo.color}20`,
-                                    bgcolor: `${typeInfo.color}08`,
-                                    position: "relative",
-                                    overflow: "hidden",
-                                  }}
-                                >
-                                  {/* 背景装飾 */}
-                                  <Box
-                                    sx={{
-                                      position: "absolute",
-                                      top: -10,
-                                      right: -10,
-                                      fontSize: "3rem",
-                                      opacity: 0.1,
-                                      color: typeInfo.color,
-                                    }}
-                                  >
-                                    🏋️
-                                  </Box>
-
-                                  {/* ヘッダー */}
-                                  <Box
-                                    sx={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      mb: 1,
-                                    }}
-                                  >
-                                    <Typography
-                                      variant="h6"
-                                      sx={{
-                                        fontSize: "1.1rem",
-                                        fontWeight: "bold",
-                                        color: typeInfo.color,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: 1,
-                                      }}
-                                    >
-                                      <span style={{ fontSize: "1.5rem" }}>
-                                        🏋️
-                                      </span>
-                                      {group.type}
-                                    </Typography>
-                                    <Chip
-                                      label={typeInfo.muscleGroup}
-                                      size="small"
-                                      sx={{
-                                        ml: 1,
-                                        bgcolor: `${typeInfo.color}20`,
-                                        color: typeInfo.color,
-                                        fontWeight: "bold",
-                                      }}
-                                    />
-                                  </Box>
-
-                                  {/* 統計情報 */}
-                                  <Stack
-                                    direction="row"
-                                    spacing={1}
-                                    sx={{ mb: 1 }}
-                                  >
-                                    <Chip
-                                      label={`${group.sets.length}セット`}
-                                      size="small"
-                                      variant="outlined"
-                                    />
-                                    <Chip
-                                      label={`${group.totalReps}回`}
-                                      size="small"
-                                      variant="outlined"
-                                    />
-                                    {group.maxWeight > 0 && (
-                                      <Chip
-                                        label={`最大${group.maxWeight}kg`}
-                                        size="small"
-                                        variant="outlined"
-                                        color="warning"
-                                      />
-                                    )}
-                                  </Stack>
-
-                                  {/* セット詳細 */}
-                                  <Box>
-                                    <Typography
-                                      variant="caption"
-                                      color="text.secondary"
-                                      sx={{ mb: 1, display: "block" }}
-                                    >
-                                      セット詳細:
-                                    </Typography>
-                                    <Stack
-                                      direction="row"
-                                      spacing={1}
-                                      flexWrap="wrap"
-                                      useFlexGap
-                                    >
-                                      {group.sets.map((set, setIndex) => (
-                                        <Chip
-                                          key={setIndex}
-                                          label={`${set.weight}kg × ${set.reps}回`}
-                                          size="small"
-                                          sx={{
-                                            bgcolor: "background.paper",
-                                            border: `1px solid ${typeInfo.color}40`,
-                                            color: "text.primary",
-                                            fontWeight: "medium",
-                                            "&:hover": {
-                                              bgcolor: `${typeInfo.color}10`,
-                                            },
-                                          }}
-                                        />
-                                      ))}
-                                    </Stack>
-                                  </Box>
-                                </Box>
-                              );
-                            })}
-
-                            {/* メモがある場合 */}
-                            {/* {workout.memo && (
-                              <Box
+                    {/* ワークアウト概要（常に表示） */}
+                    <Box sx={{ mb: 2 }}>
+                      <Stack
+                        direction="row"
+                        spacing={1}
+                        alignItems="center"
+                        sx={{ mb: 1 }}
+                      >
+                        <Chip
+                          label={`${stats.workoutTypes}種目`}
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                        />
+                        <Chip
+                          label={`${stats.totalSets}セット`}
+                          size="small"
+                          color="secondary"
+                          variant="outlined"
+                        />
+                        {(() => {
+                          const dailyIntensity = calculateIntensityForDate(
+                            feedWorkouts,
+                            workout.date.toDate()
+                          );
+                          return dailyIntensity ? (
+                            <Box
+                              sx={{
+                                position: "relative",
+                                display: "inline-block",
+                              }}
+                            >
+                              <Chip
+                                label={`強度: ${
+                                  Math.round(
+                                    dailyIntensity.totalIntensity * 10
+                                  ) / 10
+                                }`}
+                                size="small"
+                                color="success"
+                                variant="outlined"
+                              />
+                              <IconButton
+                                size="small"
+                                onClick={() => setIntensityDialogOpen(true)}
                                 sx={{
-                                  mt: 2,
-                                  p: 2,
-                                  bgcolor: "grey.50",
-                                  borderRadius: 1,
+                                  position: "absolute",
+                                  top: -6,
+                                  right: -6,
+                                  width: 16,
+                                  height: 16,
+                                  bgcolor: "primary.main",
+                                  color: "primary.contrastText",
+                                  "&:hover": {
+                                    bgcolor: "primary.dark",
+                                  },
                                 }}
                               >
-                                <Typography
-                                  variant="body2"
-                                  color="text.secondary"
-                                >
-                                  💭 {workout.memo}
-                                </Typography>
-                              </Box>
-                            )} */}
-                          </Box>
-                        );
-                      })()}
+                                <HelpIcon sx={{ fontSize: 10 }} />
+                              </IconButton>
+                            </Box>
+                          ) : null;
+                        })()}
+                      </Stack>
                     </Box>
 
+                    {/* アクションボタン */}
                     <Box
                       sx={{
-                        width: "100%",
                         display: "flex",
-                        justifyContent: "space-around",
+                        justifyContent: "space-between",
+                        alignItems: "center",
                       }}
                     >
                       <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -1464,97 +1380,305 @@ export const Feed: React.FC<FeedProps> = ({ workouts, onRefresh }) => {
                       <IconButton size="small">
                         <ShareIcon />
                       </IconButton>
+                      <Button
+                        size="small"
+                        onClick={() => toggleWorkoutExpansion(workout.id)}
+                        endIcon={
+                          isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />
+                        }
+                        sx={{
+                          color: "primary.main",
+                          "&:hover": {
+                            bgcolor: "primary.50",
+                          },
+                        }}
+                      >
+                        {isExpanded ? "詳細を閉じる" : "詳細を見る"}
+                      </Button>
                     </Box>
+                  </CardContent>
 
-                    {interactions.likeUsers.length > 0 && (
-                      <Box sx={{ width: "100%", mt: 1 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          {interactions.likeUsers.slice(0, 3).map((user) => (
-                            <Avatar
-                              key={user.id}
-                              src={user.photoURL}
-                              sx={{ width: 24, height: 24 }}
-                            />
-                          ))}
-                          {interactions.likeUsers.length > 3 && (
-                            <Typography
-                              variant="caption"
-                              color="text.secondary"
+                  {/* 折りたたみ可能な詳細部分 */}
+                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                    <CardContent sx={{ pt: 0 }}>
+                      <Divider sx={{ mb: 2 }} />
+
+                      {/* ワークアウトタイプ別の詳細 */}
+                      {stats.groupedSets.map((group, groupIndex) => {
+                        const typeInfo = getWorkoutTypeInfo(group.type);
+                        return (
+                          <Box
+                            key={groupIndex}
+                            sx={{
+                              mb: 2,
+                              p: 2,
+                              borderRadius: 2,
+                              border: `1px solid`,
+                              borderColor: `${typeInfo.color}20`,
+                              bgcolor: `${typeInfo.color}08`,
+                              position: "relative",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {/* 背景装飾 */}
+                            <Box
+                              sx={{
+                                position: "absolute",
+                                top: -10,
+                                right: -10,
+                                fontSize: "3rem",
+                                opacity: 0.1,
+                                color: typeInfo.color,
+                              }}
                             >
-                              他{interactions.likeUsers.length - 3}人
-                            </Typography>
-                          )}
-                        </Stack>
-                      </Box>
-                    )}
+                              🏋️
+                            </Box>
 
-                    {interactions.comments.length > 0 && (
-                      <Box sx={{ width: "100%", mt: 2, pl: 2 }}>
-                        <Stack spacing={1}>
-                          {interactions.comments.map((comment) => {
-                            const systemUser = SYSTEM_USERS.find(
-                              (user) => user.id === comment.userId
-                            );
-                            return (
-                              <Box
-                                key={comment.id}
+                            {/* ヘッダー */}
+                            <Box
+                              sx={{
+                                display: "flex",
+                                alignItems: "center",
+                                mb: 1,
+                              }}
+                            >
+                              <Typography
+                                variant="h6"
                                 sx={{
+                                  fontSize: "1.1rem",
+                                  fontWeight: "bold",
+                                  color: typeInfo.color,
                                   display: "flex",
-                                  alignItems: "flex-start",
+                                  alignItems: "center",
                                   gap: 1,
                                 }}
                               >
-                                <ListItemAvatar>
-                                  {systemUser ? (
-                                    <Avatar
-                                      sx={{
-                                        width: 24,
-                                        height: 24,
-                                        bgcolor: "primary.main",
-                                      }}
+                                <span style={{ fontSize: "1.5rem" }}>🏋️</span>
+                                {group.type}
+                              </Typography>
+                              <Chip
+                                label={typeInfo.muscleGroup}
+                                size="small"
+                                sx={{
+                                  ml: 1,
+                                  bgcolor: `${typeInfo.color}20`,
+                                  color: typeInfo.color,
+                                  fontWeight: "bold",
+                                }}
+                              />
+                            </Box>
+
+                            {/* 統計情報 */}
+                            <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+                              <Chip
+                                label={`${group.sets.length}セット`}
+                                size="small"
+                                variant="outlined"
+                              />
+                              <Chip
+                                label={`${group.totalReps}回`}
+                                size="small"
+                                variant="outlined"
+                              />
+                              {group.maxWeight > 0 && (
+                                <Chip
+                                  label={`最大${group.maxWeight}kg`}
+                                  size="small"
+                                  variant="outlined"
+                                  color="warning"
+                                />
+                              )}
+                            </Stack>
+
+                            {/* セット詳細 */}
+                            <Box>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ mb: 1, display: "block" }}
+                              >
+                                セット詳細:
+                              </Typography>
+                              <Stack
+                                direction="row"
+                                spacing={1}
+                                flexWrap="wrap"
+                                useFlexGap
+                              >
+                                {group.sets.map((set, setIndex) => (
+                                  <Chip
+                                    key={setIndex}
+                                    label={`${set.weight}kg × ${set.reps}回`}
+                                    size="small"
+                                    sx={{
+                                      bgcolor: "background.paper",
+                                      border: `1px solid ${typeInfo.color}40`,
+                                      color: "text.primary",
+                                      fontWeight: "medium",
+                                      "&:hover": {
+                                        bgcolor: `${typeInfo.color}10`,
+                                      },
+                                    }}
+                                  />
+                                ))}
+                              </Stack>
+                            </Box>
+                          </Box>
+                        );
+                      })}
+
+                      {/* メモがある場合 */}
+                      {workout.memo && (
+                        <Box
+                          sx={{
+                            mt: 2,
+                            p: 2,
+                            bgcolor: "grey.50",
+                            borderRadius: 1,
+                          }}
+                        >
+                          <Typography variant="body2" color="text.secondary">
+                            💭 {workout.memo}
+                          </Typography>
+                        </Box>
+                      )}
+
+                      {/* いいねしたユーザー */}
+                      {interactions.likeUsers.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ mb: 1, display: "block" }}
+                          >
+                            いいねしたユーザー:
+                          </Typography>
+                          <Stack
+                            direction="row"
+                            spacing={1}
+                            alignItems="center"
+                          >
+                            {interactions.likeUsers.slice(0, 3).map((user) => (
+                              <Avatar
+                                key={user.id}
+                                src={user.photoURL}
+                                sx={{ width: 24, height: 24 }}
+                              />
+                            ))}
+                            {interactions.likeUsers.length > 3 && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                              >
+                                他{interactions.likeUsers.length - 3}人
+                              </Typography>
+                            )}
+                          </Stack>
+                        </Box>
+                      )}
+
+                      {/* コメント */}
+                      {interactions.comments.length > 0 && (
+                        <Box sx={{ mt: 2 }}>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            sx={{ mb: 1, display: "block" }}
+                          >
+                            コメント:
+                          </Typography>
+                          <Stack spacing={1}>
+                            {interactions.comments.map((comment) => {
+                              const systemUser = SYSTEM_USERS.find(
+                                (user) => user.id === comment.userId
+                              );
+                              return (
+                                <Box
+                                  key={comment.id}
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <ListItemAvatar>
+                                    {systemUser ? (
+                                      <Avatar
+                                        sx={{
+                                          width: 24,
+                                          height: 24,
+                                          bgcolor: "primary.main",
+                                        }}
+                                      >
+                                        {systemUser.icon}
+                                      </Avatar>
+                                    ) : (
+                                      <Avatar
+                                        src={comment.user.photoURL}
+                                        sx={{
+                                          width: 24,
+                                          height: 24,
+                                          cursor: "pointer",
+                                        }}
+                                        onClick={() =>
+                                          handleProfileClick(comment.userId)
+                                        }
+                                      />
+                                    )}
+                                  </ListItemAvatar>
+                                  <Box>
+                                    <Typography variant="body2">
+                                      {systemUser?.displayName ||
+                                        comment.user.displayName ||
+                                        "不明なユーザー"}
+                                    </Typography>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
                                     >
-                                      {systemUser.icon}
-                                    </Avatar>
-                                  ) : (
-                                    <Avatar
-                                      src={comment.user.photoURL}
-                                      sx={{
-                                        width: 24,
-                                        height: 24,
-                                        cursor: "pointer",
-                                      }}
-                                      onClick={() =>
-                                        handleProfileClick(comment.userId)
-                                      }
-                                    />
-                                  )}
-                                </ListItemAvatar>
-                                <Box>
-                                  <Typography variant="body2">
-                                    {systemUser?.displayName ||
-                                      comment.user.displayName ||
-                                      "不明なユーザー"}
-                                  </Typography>
-                                  <Typography
-                                    variant="caption"
-                                    color="text.secondary"
-                                  >
-                                    {comment.content}
-                                  </Typography>
+                                      {comment.content}
+                                    </Typography>
+                                  </Box>
                                 </Box>
-                              </Box>
-                            );
-                          })}
-                        </Stack>
-                      </Box>
-                    )}
-                  </ListItem>
-                </Paper>
+                              );
+                            })}
+                          </Stack>
+                        </Box>
+                      )}
+                    </CardContent>
+                  </Collapse>
+                </Card>
                 {index < allWorkouts.length - 1 && <Divider />}
               </React.Fragment>
             );
           })}
         </List>
+
+        {/* さらに読み込むボタン */}
+        {hasMoreWorkouts && (
+          <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+            <Button
+              variant="outlined"
+              onClick={handleLoadMore}
+              disabled={isLoadingMore}
+              startIcon={
+                isLoadingMore ? (
+                  <CircularProgress size={16} />
+                ) : (
+                  <KeyboardArrowDownIcon />
+                )
+              }
+              sx={{
+                minWidth: 200,
+                "&:hover": {
+                  bgcolor: "primary.50",
+                },
+              }}
+            >
+              {isLoadingMore ? "読み込み中..." : "さらに読み込む"}
+            </Button>
+          </Box>
+        )}
       </Box>
 
       <Dialog open={commentOpen} onClose={handleCommentClose}>

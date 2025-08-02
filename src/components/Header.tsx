@@ -21,7 +21,14 @@ import {
   AdminPanelSettings as AdminIcon,
 } from "@mui/icons-material";
 import { SettingsDialog } from "./SettingsDialog";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  getDoc,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 interface HeaderProps {
@@ -43,17 +50,18 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
       }
 
       try {
-        const userDoc = await getDocs(
-          query(collection(db, "users"), where("email", "==", user.email))
-        );
+        // 自分のユーザードキュメントにアクセス
+        const userDocRef = doc(db, "users", user.uid);
+        const userDoc = await getDoc(userDocRef);
 
-        if (!userDoc.empty) {
-          const userData = userDoc.docs[0].data();
+        if (userDoc.exists()) {
+          const userData = userDoc.data();
           setIsAdmin(userData.isAdmin || false);
         } else {
           setIsAdmin(false);
         }
       } catch (err) {
+        console.error("Admin status check error:", err);
         setIsAdmin(false);
       }
     };

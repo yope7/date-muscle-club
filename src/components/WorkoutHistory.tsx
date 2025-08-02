@@ -9,8 +9,13 @@ import {
   Stack,
   Chip,
   Divider,
+  Button,
+  CircularProgress,
 } from "@mui/material";
-import { ExpandMore as ExpandMoreIcon } from "@mui/icons-material";
+import {
+  ExpandMore as ExpandMoreIcon,
+  Refresh as RefreshIcon,
+} from "@mui/icons-material";
 import { WorkoutRecord } from "@/types/workout";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
@@ -18,9 +23,15 @@ import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 
 interface WorkoutHistoryProps {
   workouts: WorkoutRecord[];
+  onFetchData?: () => Promise<void>;
+  isLoading?: boolean;
 }
 
-export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
+export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({
+  workouts,
+  onFetchData,
+  isLoading = false,
+}) => {
   const [selectedWorkoutType, setSelectedWorkoutType] = useState<string | null>(
     null
   );
@@ -107,10 +118,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
         workout.sets
           ?.map((set) => set.workoutType || workout.name || "不明")
           .filter((type): type is string => Boolean(type)) || [];
-
-      // デバッグ: セットデータの構造を確認
-      console.log("Workout sets:", workout.sets);
-      console.log("WorkoutTypesInSets:", workoutTypesInSets);
 
       workoutTypesInSets.forEach((type) => {
         acc[type] = (acc[type] || 0) + 1;
@@ -228,10 +235,45 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
 
           {/* ワークアウトタイプ分析 */}
 
+          {/* データが少ない場合の取得ボタン */}
+          {sortedWorkouts.length < 5 && onFetchData && (
+            <Box sx={{ textAlign: "center", py: 2, mb: 2 }}>
+              <Typography color="text.secondary" gutterBottom>
+                データが少ない場合があります
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={onFetchData}
+                disabled={isLoading}
+                startIcon={
+                  isLoading ? <CircularProgress size={14} /> : <RefreshIcon />
+                }
+              >
+                {isLoading ? "取得中..." : "データを再取得"}
+              </Button>
+            </Box>
+          )}
+
           {sortedWorkouts.length === 0 ? (
-            <Typography color="text.secondary" textAlign="center">
-              トレーニング記録がありません
-            </Typography>
+            <Box sx={{ textAlign: "center", py: 3 }}>
+              <Typography color="text.secondary" gutterBottom>
+                トレーニング記録がありません
+              </Typography>
+              {onFetchData && (
+                <Button
+                  variant="outlined"
+                  onClick={onFetchData}
+                  disabled={isLoading}
+                  startIcon={
+                    isLoading ? <CircularProgress size={16} /> : <RefreshIcon />
+                  }
+                  sx={{ mt: 2 }}
+                >
+                  {isLoading ? "取得中..." : "データを取得する"}
+                </Button>
+              )}
+            </Box>
           ) : (
             sortedWorkouts.map((workout, index) => {
               const workoutTypeInfo = getWorkoutTypeInfo(
@@ -331,9 +373,6 @@ export const WorkoutHistory: React.FC<WorkoutHistoryProps> = ({ workouts }) => {
                               </Typography>
                               <Stack spacing={1}>
                                 {sets.map((set, setIndex) => {
-                                  // デバッグ: 各セットの構造を確認
-                                  console.log(`Set ${setIndex}:`, set);
-
                                   return (
                                     <Paper key={setIndex} sx={{ p: 2 }}>
                                       <Box

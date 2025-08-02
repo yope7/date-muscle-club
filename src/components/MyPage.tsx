@@ -10,7 +10,14 @@ import { WorkoutHistory } from "./WorkoutHistory";
 export const MyPage: React.FC = () => {
   const { user } = useAuth();
   const { profile } = useUserStore();
-  const { workouts } = useWorkoutStore();
+  const { myPageWorkouts, fetchMyPageWorkouts, isLoading } = useWorkoutStore();
+
+  // マイページ用のデータを取得
+  React.useEffect(() => {
+    if (user) {
+      fetchMyPageWorkouts(user.uid);
+    }
+  }, [user, fetchMyPageWorkouts]);
 
   if (!user) {
     return (
@@ -42,9 +49,13 @@ export const MyPage: React.FC = () => {
         <Divider sx={{ my: 2 }} />
 
         <Box sx={{ flexGrow: 1 }}>
-          <WorkoutStats workouts={workouts} />
-          <WorkoutGraphs workouts={workouts} />
-          <WorkoutHistory workouts={workouts} />
+          <WorkoutStats workouts={myPageWorkouts} />
+          <WorkoutGraphs workouts={myPageWorkouts} />
+          <WorkoutHistory
+            workouts={myPageWorkouts}
+            onFetchData={user ? () => fetchMyPageWorkouts(user.uid) : undefined}
+            isLoading={isLoading}
+          />
         </Box>
       </Paper>
     </Box>

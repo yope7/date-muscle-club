@@ -52,6 +52,7 @@ import { WorkoutSets } from "./WorkoutSets";
 import { NumberPicker } from "./NumberPicker";
 import { WorkoutTypeSelector } from "./WorkoutTypeSelector";
 import { WorkoutType } from "@/data/workoutTypes";
+import { useRive, Layout, Fit, Alignment } from "@rive-app/react-canvas";
 
 interface CalendarProps {
   isDrawerOpen?: boolean;
@@ -59,8 +60,13 @@ interface CalendarProps {
 
 export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const theme = useTheme();
-  const { selectedDate, setSelectedDate, workouts, updateWorkout, addWorkout } =
-    useWorkoutStore();
+  const {
+    workouts,
+    updateWorkout,
+    addWorkout,
+    fetchWorkoutsByMonth,
+    isLoading,
+  } = useWorkoutStore();
   const { user } = useAuth();
   const { calendarDisplayMode } = useSettingsStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -68,6 +74,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const [monthWorkouts, setMonthWorkouts] = useState<{ [key: string]: number }>(
     {}
   );
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedWorkout, setSelectedWorkout] = useState<WorkoutRecord | null>(
     null
   );
@@ -78,6 +85,155 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     useState<WorkoutType | null>(null);
   const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
   const [bulkSetCount, setBulkSetCount] = useState(1);
+
+  // Riveアニメーションの設定
+  const { RiveComponent, rive } = useRive({
+    src: "/untitled.riv",
+    layout: new Layout({
+      fit: Fit.Contain,
+      alignment: Alignment.Center,
+    }),
+    autoplay: true,
+    onStateChange: (event) => {
+      console.log("State changed:", event);
+    },
+    onRiveReady: (rive) => {
+      console.log("=== RIVE READY EVENT ===");
+      console.log("Rive object:", rive);
+      console.log(
+        "Available methods:",
+        Object.getOwnPropertyNames(Object.getPrototypeOf(rive))
+      );
+    },
+  });
+
+  // Riveオブジェクトが利用可能になった時の処理
+  useEffect(() => {
+    if (rive) {
+      console.log("=== RIVE FILE DETAILED INFO ===");
+      console.log("Rive object is ready");
+      console.log("State machines:", rive.stateMachineNames);
+
+      // 利用可能なステートマシンの情報を表示
+      rive.stateMachineNames.forEach((name, index) => {
+        try {
+          const inputs = rive.stateMachineInputs(name);
+          if (inputs && inputs.length > 0) {
+            console.log(
+              `State machine ${index}: ${name}`,
+              inputs.map((input) => input.name)
+            );
+          } else {
+            console.log(`State machine ${index}: ${name} - No inputs`);
+          }
+        } catch (error) {
+          console.log(`Error getting inputs for ${name}:`, error);
+        }
+      });
+    }
+  }, [rive]);
+
+  // クリックハンドラー
+  const handleRiveClick = () => {
+    console.log("Rive click event triggered");
+    if (rive) {
+      try {
+        // 利用可能なステートマシンを確認
+        const stateMachines = rive.stateMachineNames;
+        console.log("Available state machines:", stateMachines);
+
+        if (stateMachines.length > 0) {
+          const inputs = rive.stateMachineInputs(stateMachines[0]);
+
+          if (inputs && inputs.length > 0) {
+            console.log(
+              "Available inputs:",
+              inputs.map((input) => input.name)
+            );
+
+            // クリック関連の入力を見つける
+            const clickInput = inputs.find(
+              (input) =>
+                input.name === "click" ||
+                input.name === "Click" ||
+                input.name === "pressed" ||
+                input.name === "Pressed"
+            );
+
+            if (clickInput) {
+              clickInput.fire();
+              console.log("Click input fired:", clickInput.name);
+            } else {
+              console.log("No click input found");
+            }
+          } else {
+            console.log(
+              "No inputs found in state machine - trying alternative methods"
+            );
+            // 入力がない場合の代替手段
+            try {
+              // アニメーションを一時停止して再開
+              rive.pause();
+              setTimeout(() => {
+                rive.play();
+              }, 100);
+              console.log("Animation restarted as click effect");
+            } catch (animError) {
+              console.log("Could not control animation:", animError);
+            }
+          }
+        } else {
+          console.log("No state machines found");
+        }
+      } catch (error) {
+        console.error("Error in click handler:", error);
+      }
+    } else {
+      console.log("Rive object not available");
+    }
+  };
+
+  // ホバーハンドラー
+  const handleRiveHover = () => {
+    if (rive) {
+      try {
+        const stateMachines = rive.stateMachineNames;
+        if (stateMachines.length > 0) {
+          const inputs = rive.stateMachineInputs(stateMachines[0]);
+          if (inputs && inputs.length > 0) {
+            const hoverInput = inputs.find((input) => input.name === "hover");
+            if (hoverInput) {
+              hoverInput.fire();
+              console.log("Hover input fired:", hoverInput.name);
+            }
+          }
+        }
+      } catch (error) {
+        console.log("Rive animation hovered");
+      }
+    }
+  };
+
+  // ホバーアウトハンドラー
+  const handleRiveHoverOut = () => {
+    if (rive) {
+      try {
+        const stateMachines = rive.stateMachineNames;
+        if (stateMachines.length > 0) {
+          const inputs = rive.stateMachineInputs(stateMachines[0]);
+          if (inputs && inputs.length > 0) {
+            const hoverInput = inputs.find((input) => input.name === "hover");
+            if (hoverInput) {
+              hoverInput.fire();
+              console.log("Hover out input fired:", hoverInput.name);
+            }
+          }
+        }
+      } catch (error) {
+        console.log("Rive animation hover out");
+      }
+    }
+  };
 
   // よく使う重量・回数のプリセット
   const weightRepsPresets = [
@@ -103,43 +259,75 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       return;
     }
 
-    const startDate = startOfMonth(currentMonth);
-    const endDate = endOfMonth(currentMonth);
+    // 初期化時に現在の月のデータを取得
+    const initializeMonthData = async () => {
+      await fetchWorkoutsByMonth(user.uid, currentMonth);
+      setLoading(false);
+    };
 
-    const q = query(
-      collection(db, "users", user.uid, "workouts"),
-      where("date", ">=", startDate),
-      where("date", "<=", endDate)
-    );
+    initializeMonthData();
+  }, [user, fetchWorkoutsByMonth]);
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const workoutMap: { [key: string]: number } = {};
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const date = data.date?.toDate();
-          if (date) {
-            const dateKey = format(date, "yyyy-MM-dd");
-            const totalReps =
-              data.sets?.reduce(
-                (sum: number, set: any) => sum + (set.reps || 0),
-                0
-              ) || 0;
-            workoutMap[dateKey] = totalReps;
-          }
-        });
-        setMonthWorkouts(workoutMap);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching workouts:", error);
-        setLoading(false);
+  // workoutStoreのデータから月別データを生成
+  useEffect(() => {
+    if (!user || !workouts) return;
+
+    const workoutMap: { [key: string]: number } = {};
+
+    workouts.forEach((workout) => {
+      if (workout.date instanceof Timestamp) {
+        const date = workout.date.toDate();
+        const dateKey = format(date, "yyyy-MM-dd");
+        const totalReps =
+          workout.sets?.reduce(
+            (sum: number, set: any) => sum + (set.reps || 0),
+            0
+          ) || 0;
+        workoutMap[dateKey] = totalReps;
       }
+    });
+
+    setMonthWorkouts(workoutMap);
+  }, [user, workouts, currentMonth]);
+
+  // データの整合性チェックと自動再取得
+  useEffect(() => {
+    if (!user || !workouts) return;
+
+    // 現在の月の開始日と終了日を計算
+    const startOfMonth = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth(),
+      1
+    );
+    const endOfMonth = new Date(
+      currentMonth.getFullYear(),
+      currentMonth.getMonth() + 1,
+      0
     );
 
-    return () => unsubscribe();
-  }, [user, currentMonth]);
+    // 前月の一部も含める（カレンダー表示用）
+    const startDate = new Date(startOfMonth);
+    startDate.setDate(startDate.getDate() - 7);
+
+    // 現在の月のデータが不足しているかチェック
+    const currentMonthWorkouts = workouts.filter((workout) => {
+      if (workout.date instanceof Timestamp) {
+        const workoutDate = workout.date.toDate();
+        return workoutDate >= startDate && workoutDate <= endOfMonth;
+      }
+      return false;
+    });
+
+    // データが不足している場合（0件または予想より少ない場合）は再取得
+    const shouldRefetch =
+      currentMonthWorkouts.length === 0 ||
+      (currentMonthWorkouts.length < 5 && workouts.length > 10); // 月のデータが少ないが全体のデータは多い場合
+
+    if (shouldRefetch) {
+      fetchWorkoutsByMonth(user.uid, currentMonth);
+    }
+  }, [user, workouts, currentMonth, fetchWorkoutsByMonth]);
 
   const days = ["日", "月", "火", "水", "木", "金", "土"];
   const monthStart = startOfMonth(currentMonth);
@@ -171,12 +359,22 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     return 2;
   };
 
-  const handlePrevMonth = () => {
-    setCurrentMonth((prev) => subMonths(prev, 1));
+  const handlePrevMonth = async () => {
+    const newMonth = subMonths(currentMonth, 1);
+    setCurrentMonth(newMonth);
+    if (user) {
+      console.log("=== Prev Month Debug ===");
+      await fetchWorkoutsByMonth(user.uid, newMonth);
+    }
   };
 
-  const handleNextMonth = () => {
-    setCurrentMonth((prev) => addMonths(prev, 1));
+  const handleNextMonth = async () => {
+    const newMonth = addMonths(currentMonth, 1);
+    setCurrentMonth(newMonth);
+    if (user) {
+      console.log("=== Next Month Debug ===");
+      await fetchWorkoutsByMonth(user.uid, newMonth);
+    }
   };
 
   const handleDateClick = async (date: Date) => {
@@ -190,6 +388,40 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         isValid(w.date.toDate()) &&
         format(w.date.toDate(), "yyyy-MM-dd") === dateKey
     );
+
+    // データの整合性チェック
+    if (!workout && user) {
+      // クリックした日付のデータが見つからない場合、データが不足している可能性がある
+      const clickedMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const currentMonthData = workouts.filter((w) => {
+        if (w.date instanceof Timestamp) {
+          const workoutDate = w.date.toDate();
+          return (
+            workoutDate.getFullYear() === clickedMonth.getFullYear() &&
+            workoutDate.getMonth() === clickedMonth.getMonth()
+          );
+        }
+        return false;
+      });
+
+      // 月のデータが少ない場合は再取得を試行
+      if (currentMonthData.length < 3 && workouts.length > 5) {
+        await fetchWorkoutsByMonth(user.uid, clickedMonth);
+
+        // 少し待ってから再度検索
+        setTimeout(() => {
+          const updatedWorkout = workouts.find(
+            (w) =>
+              w.date instanceof Timestamp &&
+              isValid(w.date.toDate()) &&
+              format(w.date.toDate(), "yyyy-MM-dd") === dateKey
+          );
+          if (updatedWorkout) {
+            setSelectedWorkout(updatedWorkout);
+          }
+        }, 1000);
+      }
+    }
 
     if (workout) {
       setSelectedWorkout(workout);
@@ -205,7 +437,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       );
 
       const newWorkout: WorkoutRecord = {
-        id: "",
+        id: `temp_${Date.now()}`, // 一時的なIDを設定
         userId: user?.uid || "",
         date: Timestamp.fromDate(workoutDate),
         sets: [],
@@ -218,6 +450,51 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       setSelectedWorkout(newWorkout);
     }
   };
+
+  // 選択されたワークアウトを常に最新の状態に保つ
+  useEffect(() => {
+    if (!selectedDate || !workouts.length) return;
+
+    const dateKey = format(selectedDate, "yyyy-MM-dd");
+    const currentWorkout = workouts.find(
+      (w) =>
+        w.date instanceof Timestamp &&
+        isValid(w.date.toDate()) &&
+        format(w.date.toDate(), "yyyy-MM-dd") === dateKey
+    );
+
+    if (
+      currentWorkout &&
+      (!selectedWorkout || selectedWorkout.id !== currentWorkout.id)
+    ) {
+      setSelectedWorkout(currentWorkout);
+    }
+  }, [selectedDate, workouts]);
+
+  // 定期的なデータ整合性チェック（5秒ごと）
+  useEffect(() => {
+    if (!user || !workouts.length) return;
+
+    const interval = setInterval(() => {
+      const currentMonthData = workouts.filter((w) => {
+        if (w.date instanceof Timestamp) {
+          const workoutDate = w.date.toDate();
+          return (
+            workoutDate.getFullYear() === currentMonth.getFullYear() &&
+            workoutDate.getMonth() === currentMonth.getMonth()
+          );
+        }
+        return false;
+      });
+
+      // データが不足している場合は再取得
+      if (currentMonthData.length === 0 && workouts.length > 0) {
+        fetchWorkoutsByMonth(user.uid, currentMonth);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [user, workouts, currentMonth, fetchWorkoutsByMonth]);
 
   const handleAddSet = async () => {
     if (!selectedWorkout) return;
@@ -242,7 +519,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       name: selectedWorkoutType?.name || "ベンチプレス",
     };
 
-    if (selectedWorkout.id) {
+    // 一時的なIDの場合は新規作成、そうでなければ更新
+    if (selectedWorkout.id && !selectedWorkout.id.startsWith("temp_")) {
       await updateWorkout(updatedWorkout);
     } else {
       await addWorkout(updatedWorkout);
@@ -261,7 +539,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     setAddSetDialogOpen(true);
   };
 
-  if (loading) {
+  if (loading || isLoading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
         <CircularProgress />
@@ -288,13 +566,16 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           mb: 2,
         }}
       >
-        <IconButton onClick={handlePrevMonth}>
+        <IconButton onClick={handlePrevMonth} disabled={isLoading}>
           <ChevronLeft />
         </IconButton>
-        <Typography variant="h6">
-          {format(currentMonth, "yyyy年M月", { locale: ja })}
-        </Typography>
-        <IconButton onClick={handleNextMonth}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="h6">
+            {format(currentMonth, "yyyy年M月", { locale: ja })}
+          </Typography>
+          {isLoading && <CircularProgress size={20} />}
+        </Box>
+        <IconButton onClick={handleNextMonth} disabled={isLoading}>
           <ChevronRight />
         </IconButton>
       </Box>
