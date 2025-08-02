@@ -38,6 +38,7 @@ import {
 } from "@mui/icons-material";
 import { useAuth } from "@/hooks/useAuth";
 import { SettingsDialog } from "./SettingsDialog";
+import { AboutDialog } from "./AboutDialog";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { InviteFriend } from "./InviteFriend";
 import { useUserStore } from "@/store/userStore";
@@ -64,6 +65,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   const [friendsOpen, setFriendsOpen] = useState(false);
   const [inviteListOpen, setInviteListOpen] = useState(false);
   const [teamManagementOpen, setTeamManagementOpen] = useState(false);
+  const [changelogOpen, setChangelogOpen] = useState(false);
   const [hasPendingInvites, setHasPendingInvites] = useState(false);
   const { resetData } = useWorkoutStore();
 
@@ -243,7 +245,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
             </ListItemIcon>
             <ListItemText primary="ヘルプ" />
           </ListItemButton>
-          <ListItemButton>
+          <ListItemButton onClick={() => setChangelogOpen(true)}>
             <ListItemIcon>
               <InfoIcon />
             </ListItemIcon>
@@ -323,6 +325,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           <Button onClick={handleTeamManagementClose}>閉じる</Button>
         </DialogActions>
       </Dialog>
+      <AboutDialog open={changelogOpen} onOpenChange={setChangelogOpen} />
     </>
   );
 };

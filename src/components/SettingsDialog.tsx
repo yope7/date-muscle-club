@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React from 'react';
+import React from "react";
 import {
   Dialog,
   DialogTitle,
@@ -12,8 +12,8 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-} from '@mui/material';
-import { useSettingsStore } from '@/store/settingsStore';
+} from "@mui/material";
+import { useSettingsStore } from "@/store/settingsStore";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -24,7 +24,7 @@ export const SettingsDialog = ({ open, onClose }: SettingsDialogProps) => {
   const { calendarDisplayMode, setCalendarDisplayMode } = useSettingsStore();
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setCalendarDisplayMode(event.target.value as 'color' | 'fire');
+    setCalendarDisplayMode(event.target.value as "color" | "fire");
   };
 
   return (
@@ -33,10 +33,7 @@ export const SettingsDialog = ({ open, onClose }: SettingsDialogProps) => {
       <DialogContent>
         <FormControl component="fieldset" sx={{ mt: 2 }}>
           <FormLabel component="legend">カレンダー表示モード</FormLabel>
-          <RadioGroup
-            value={calendarDisplayMode}
-            onChange={handleChange}
-          >
+          <RadioGroup value={calendarDisplayMode} onChange={handleChange}>
             <FormControlLabel
               value="color"
               control={<Radio />}
@@ -55,4 +52,4 @@ export const SettingsDialog = ({ open, onClose }: SettingsDialogProps) => {
       </DialogActions>
     </Dialog>
   );
-}; 
+};
