@@ -144,14 +144,17 @@ export const updateWorkout = async (workout: WorkoutRecord): Promise<void> => {
       updatedAt: serverTimestamp(),
     };
 
-    // 合同トレーニング情報を追加
+    // 合同トレーニング情報を追加（undefined値を除外）
     if (workout.isGroupWorkout !== undefined) {
       updateData.isGroupWorkout = workout.isGroupWorkout;
     }
     if (workout.groupMembers !== undefined) {
       updateData.groupMembers = workout.groupMembers;
     }
-    if (workout.groupWorkoutName !== undefined) {
+    if (
+      workout.groupWorkoutName !== undefined &&
+      workout.groupWorkoutName !== null
+    ) {
       updateData.groupWorkoutName = workout.groupWorkoutName;
     }
 
@@ -257,13 +260,27 @@ export const saveDayGroupWorkoutInfo = async (
       "dayGroupWorkouts",
       date
     );
-    await setDoc(dayGroupWorkoutRef, {
-      ...groupWorkoutInfo,
+
+    // undefined値を除外してFirestoreに保存
+    const dataToSave: any = {
+      date: groupWorkoutInfo.date,
+      isGroupWorkout: groupWorkoutInfo.isGroupWorkout,
+      groupMembers: groupWorkoutInfo.groupMembers || [],
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // groupWorkoutNameが存在し、undefinedでない場合のみ追加
+    if (
+      groupWorkoutInfo.groupWorkoutName !== undefined &&
+      groupWorkoutInfo.groupWorkoutName !== null
+    ) {
+      dataToSave.groupWorkoutName = groupWorkoutInfo.groupWorkoutName;
+    }
+
+    await setDoc(dayGroupWorkoutRef, dataToSave);
     console.log(
       `日付 ${date} の合同トレーニング情報を保存しました:`,
-      groupWorkoutInfo
+      dataToSave
     );
   } catch (error) {
     console.error("Error saving day group workout info:", error);
@@ -288,10 +305,15 @@ export const getDayGroupWorkoutInfo = async (
 
     if (docSnap.exists()) {
       const data = docSnap.data();
+
+      // データの整合性チェック: groupMembersが存在する場合は合同トレーニングとして認識
+      const groupMembers = data.groupMembers || [];
+      const isGroupWorkout = data.isGroupWorkout || groupMembers.length > 0;
+
       return {
         date: data.date,
-        isGroupWorkout: data.isGroupWorkout,
-        groupMembers: data.groupMembers || [],
+        isGroupWorkout: isGroupWorkout,
+        groupMembers: groupMembers,
         groupWorkoutName: data.groupWorkoutName,
         updatedAt: data.updatedAt,
       };
@@ -328,10 +350,15 @@ export const getMonthGroupWorkoutInfo = async (
     const snapshot = await getDocs(q);
     return snapshot.docs.map((doc) => {
       const data = doc.data();
+
+      // データの整合性チェック: groupMembersが存在する場合は合同トレーニングとして認識
+      const groupMembers = data.groupMembers || [];
+      const isGroupWorkout = data.isGroupWorkout || groupMembers.length > 0;
+
       return {
         date: data.date,
-        isGroupWorkout: data.isGroupWorkout,
-        groupMembers: data.groupMembers || [],
+        isGroupWorkout: isGroupWorkout,
+        groupMembers: groupMembers,
         groupWorkoutName: data.groupWorkoutName,
         updatedAt: data.updatedAt,
       };

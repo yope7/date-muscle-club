@@ -236,14 +236,19 @@ export const useWorkoutStore = create<WorkoutState>()(
             999
           );
 
-          // 前月の一部も含める（カレンダー表示用）
+          // カレンダー表示に必要な全期間を計算
+          // 前月の一部（月の最初の日曜日まで）
           const startDate = new Date(startOfMonth);
-          startDate.setDate(startDate.getDate() - 7); // 前週の日曜日から
+          startDate.setDate(startDate.getDate() - startDate.getDay());
+
+          // 翌月の一部（月の最後の土曜日まで）
+          const endDate = new Date(endOfMonth);
+          endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
 
           const q = query(
             collection(db, "users", userId, "workouts"),
             where("date", ">=", Timestamp.fromDate(startDate)),
-            where("date", "<=", Timestamp.fromDate(endOfMonth)),
+            where("date", "<=", Timestamp.fromDate(endDate)),
             orderBy("date", "desc")
           );
 

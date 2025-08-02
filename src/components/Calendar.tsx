@@ -295,15 +295,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       try {
         await fetchWorkoutsByMonth(user.uid, currentMonth);
 
-        // 月の合同トレーニング情報を取得
-        const year = getYear(currentMonth);
-        const month = getMonth(currentMonth) + 1;
-        const monthGroupInfo = await getMonthGroupWorkoutInfo(
-          user.uid,
-          year,
-          month
-        );
-        setMonthGroupWorkoutInfo(monthGroupInfo);
+        // カレンダー表示期間全体の合同トレーニング情報を取得
+        await fetchCalendarGroupWorkoutInfo(user.uid, currentMonth);
 
         setLoading(false);
       } catch (error) {
@@ -416,6 +409,54 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     return 2;
   };
 
+  // カレンダー表示期間全体の合同トレーニング情報を取得
+  const fetchCalendarGroupWorkoutInfo = async (userId: string, date: Date) => {
+    try {
+      // カレンダー表示に必要な全期間を計算
+      const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+      // 前月の一部（月の最初の日曜日まで）
+      const startDate = new Date(startOfMonth);
+      startDate.setDate(startDate.getDate() - startDate.getDay());
+
+      // 翌月の一部（月の最後の土曜日まで）
+      const endDate = new Date(endOfMonth);
+      endDate.setDate(endDate.getDate() + (6 - endDate.getDay()));
+
+      // 期間内の各日付の合同トレーニング情報を取得
+      const groupWorkoutInfo: DayGroupWorkoutInfo[] = [];
+      const currentDate = new Date(startDate);
+
+      while (currentDate <= endDate) {
+        const dateKey = format(currentDate, "yyyy-MM-dd");
+        try {
+          const info = await getDayGroupWorkoutInfo(userId, dateKey);
+          if (info) {
+            groupWorkoutInfo.push(info);
+          }
+        } catch (error) {
+          console.error(
+            `合同トレーニング情報の取得に失敗 (${dateKey}):`,
+            error
+          );
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      setMonthGroupWorkoutInfo(groupWorkoutInfo);
+      console.log(
+        "カレンダー表示期間の合同トレーニング情報を取得:",
+        groupWorkoutInfo
+      );
+    } catch (error) {
+      console.error(
+        "カレンダー表示期間の合同トレーニング情報取得に失敗:",
+        error
+      );
+    }
+  };
+
   // 日付の合同トレーニング情報を取得
   const fetchDayGroupWorkoutInfo = async (date: Date) => {
     if (!user) return;
@@ -423,6 +464,34 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     const dateKey = format(date, "yyyy-MM-dd");
     try {
       const info = await getDayGroupWorkoutInfo(user.uid, dateKey);
+
+      // データの整合性チェック: groupMembersが存在する場合は合同トレーニングとして認識
+      if (
+        info &&
+        info.groupMembers &&
+        info.groupMembers.length > 0 &&
+        !info.isGroupWorkout
+      ) {
+        console.log("データの不整合を検出、修正します:", info);
+        // バックグラウンドでデータを修正
+        setTimeout(async () => {
+          try {
+            await saveDayGroupWorkoutInfo(user.uid, dateKey, {
+              date: dateKey,
+              isGroupWorkout: true,
+              groupMembers: info.groupMembers || [],
+              groupWorkoutName: info.groupWorkoutName || "",
+            });
+            console.log("データの不整合を修正しました");
+            // 修正後のデータを再取得
+            const updatedInfo = await getDayGroupWorkoutInfo(user.uid, dateKey);
+            setDayGroupWorkoutInfo(updatedInfo);
+          } catch (error) {
+            console.error("データの不整合修正に失敗:", error);
+          }
+        }, 1000);
+      }
+
       setDayGroupWorkoutInfo(info);
       console.log(`日付 ${dateKey} の合同トレーニング情報:`, info);
     } catch (error) {
@@ -468,15 +537,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       console.log("=== Prev Month Debug ===");
       await fetchWorkoutsByMonth(user.uid, newMonth);
 
-      // 月の合同トレーニング情報を取得
-      const year = getYear(newMonth);
-      const month = getMonth(newMonth) + 1;
-      const monthGroupInfo = await getMonthGroupWorkoutInfo(
-        user.uid,
-        year,
-        month
-      );
-      setMonthGroupWorkoutInfo(monthGroupInfo);
+      // カレンダー表示期間全体の合同トレーニング情報を取得
+      await fetchCalendarGroupWorkoutInfo(user.uid, newMonth);
     }
   };
 
@@ -487,15 +549,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       console.log("=== Next Month Debug ===");
       await fetchWorkoutsByMonth(user.uid, newMonth);
 
-      // 月の合同トレーニング情報を取得
-      const year = getYear(newMonth);
-      const month = getMonth(newMonth) + 1;
-      const monthGroupInfo = await getMonthGroupWorkoutInfo(
-        user.uid,
-        year,
-        month
-      );
-      setMonthGroupWorkoutInfo(monthGroupInfo);
+      // カレンダー表示期間全体の合同トレーニング情報を取得
+      await fetchCalendarGroupWorkoutInfo(user.uid, newMonth);
     }
   };
 
@@ -563,9 +618,34 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
           if (info) {
             console.log("既存の合同トレーニング情報を復元:", info);
-            setIsGroupWorkout(info.isGroupWorkout);
-            setSelectedGroupMembers(info.groupMembers);
+
+            // データの整合性チェック: groupMembersが存在する場合は合同トレーニングとして認識
+            const shouldBeGroupWorkout =
+              info.isGroupWorkout ||
+              (info.groupMembers && info.groupMembers.length > 0);
+
+            setIsGroupWorkout(shouldBeGroupWorkout);
+            setSelectedGroupMembers(info.groupMembers || []);
             setHasUnsavedGroupWorkoutChanges(false);
+
+            // データの不整合を修正（必要に応じて）
+            if (shouldBeGroupWorkout && !info.isGroupWorkout) {
+              console.log("データの不整合を検出、修正します:", info);
+              // バックグラウンドでデータを修正
+              setTimeout(async () => {
+                try {
+                  await saveDayGroupWorkoutInfo(user.uid, dateKey, {
+                    date: dateKey,
+                    isGroupWorkout: true,
+                    groupMembers: info.groupMembers || [],
+                    groupWorkoutName: info.groupWorkoutName || "",
+                  });
+                  console.log("データの不整合を修正しました");
+                } catch (error) {
+                  console.error("データの不整合修正に失敗:", error);
+                }
+              }, 1000);
+            }
           } else {
             // 合同トレーニング情報がない場合は初期化
             setIsGroupWorkout(false);
@@ -791,6 +871,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           date: dateKey,
           isGroupWorkout: false,
           groupMembers: [],
+          groupWorkoutName: "", // 空文字列を明示的に設定
         });
 
         // その日の全ワークアウトから合同トレーニング情報を削除
@@ -806,7 +887,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
             ...workout,
             isGroupWorkout: false,
             groupMembers: [],
-            groupWorkoutName: "",
+            groupWorkoutName: "", // 空文字列を明示的に設定
           });
         }
 
@@ -814,15 +895,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         setDayGroupWorkoutInfo(null);
         setHasUnsavedGroupWorkoutChanges(false);
 
-        // 月の合同トレーニング情報も更新
-        const year = getYear(selectedDate);
-        const month = getMonth(selectedDate) + 1;
-        const updatedMonthGroupInfo = await getMonthGroupWorkoutInfo(
-          user.uid,
-          year,
-          month
-        );
-        setMonthGroupWorkoutInfo(updatedMonthGroupInfo);
+        // カレンダー表示期間全体の合同トレーニング情報も更新
+        await fetchCalendarGroupWorkoutInfo(user.uid, currentMonth);
 
         console.log("合同トレーニングのキャンセルが完了しました");
       } catch (error) {
@@ -840,7 +914,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       ? currentTeam
         ? `${currentTeam.name}合同トレーニング`
         : "フレンド合同トレーニング"
-      : undefined;
+      : ""; // undefinedの代わりに空文字列を使用
 
     console.log("日付レベルの合同トレーニング情報を保存:", {
       date: dateKey,
@@ -875,8 +949,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           const updatedWorkout: WorkoutRecord = {
             ...workout,
             isGroupWorkout: isGroupWorkout,
-            groupMembers: isGroupWorkout ? selectedGroupMembers : undefined,
-            groupWorkoutName,
+            groupMembers: isGroupWorkout ? selectedGroupMembers : [],
+            groupWorkoutName: isGroupWorkout ? groupWorkoutName : "", // 合同トレーニングでない場合は空文字列
             updatedAt: Timestamp.fromDate(new Date()),
           };
 
@@ -902,15 +976,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
 
       setHasUnsavedGroupWorkoutChanges(false);
 
-      // 月の合同トレーニング情報も更新
-      const year = getYear(selectedDate);
-      const month = getMonth(selectedDate) + 1;
-      const updatedMonthGroupInfo = await getMonthGroupWorkoutInfo(
-        user.uid,
-        year,
-        month
-      );
-      setMonthGroupWorkoutInfo(updatedMonthGroupInfo);
+      // カレンダー表示期間全体の合同トレーニング情報も更新
+      await fetchCalendarGroupWorkoutInfo(user.uid, currentMonth);
 
       console.log("合同トレーニング情報の保存が完了しました");
     } catch (error) {
@@ -1012,7 +1079,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
                     ? "primary.main"
                     : isCurrentDay
                     ? "primary.main"
-                    : "text.primary"
+                    : isCurrentMonth
+                    ? "text.primary"
+                    : "text.disabled"
                 }
                 sx={{
                   fontSize: { xs: "0.875rem", sm: "1rem" },
