@@ -699,22 +699,31 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       updatedAt: Timestamp.fromDate(new Date()),
       name: selectedWorkoutType?.name || "ベンチプレス",
       isGroupWorkout: isGroupWorkout,
-      groupMembers: isGroupWorkout ? selectedGroupMembers : undefined,
+      groupMembers: isGroupWorkout ? selectedGroupMembers : [],
       groupWorkoutName: isGroupWorkout
         ? currentTeam
           ? `${currentTeam.name}合同トレーニング`
           : "フレンド合同トレーニング"
-        : undefined,
+        : "",
     };
 
-    if (selectedWorkout.id && !selectedWorkout.id.startsWith("temp_")) {
-      await updateWorkout(updatedWorkout);
-    } else {
-      await addWorkout(updatedWorkout);
-    }
+    try {
+      if (selectedWorkout.id && !selectedWorkout.id.startsWith("temp_")) {
+        await updateWorkout(updatedWorkout);
+      } else {
+        await addWorkout(updatedWorkout);
+      }
 
-    setSelectedWorkout(updatedWorkout);
-    setSnackbarOpen(true);
+      setSelectedWorkout(updatedWorkout);
+      setSnackbarOpen(true);
+
+      // 追加・更新後にカレンダーを更新
+      if (user) {
+        await fetchWorkoutsByMonth(user.uid, currentMonth);
+      }
+    } catch (error) {
+      console.error("Error adding/updating workout:", error);
+    }
 
     if (isGroupWorkout && selectedGroupMembers.length > 0) {
       setTimeout(() => {
@@ -729,8 +738,11 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     isGroupWorkout,
     selectedGroupMembers,
     currentTeam,
+    user,
+    currentMonth,
     updateWorkout,
     addWorkout,
+    fetchWorkoutsByMonth,
     saveGroupWorkoutState,
   ]);
 
@@ -1000,14 +1012,28 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           <WorkoutSets
             workout={selectedWorkout}
             onDelete={async (workout) => {
-              if (workout.id) {
-                await useWorkoutStore.getState().deleteWorkout(workout.id);
+              try {
+                if (workout.id) {
+                  await useWorkoutStore.getState().deleteWorkout(workout.id);
+                }
+                setSelectedWorkout(null);
+
+                // 削除後にカレンダーを更新
+                if (user) {
+                  await fetchWorkoutsByMonth(user.uid, currentMonth);
+                }
+              } catch (error) {
+                console.error("Error deleting workout:", error);
               }
-              setSelectedWorkout(null);
             }}
             onAddSet={() => setWorkoutTypeSelectorOpen(true)}
-            onUpdate={(updatedWorkout) => {
+            onUpdate={async (updatedWorkout) => {
               setSelectedWorkout(updatedWorkout);
+
+              // 更新後にカレンダーを更新
+              if (user) {
+                await fetchWorkoutsByMonth(user.uid, currentMonth);
+              }
             }}
             allWorkouts={workouts}
           />

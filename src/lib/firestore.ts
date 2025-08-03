@@ -112,11 +112,37 @@ export const addWorkout = async (
       const workoutWithSetIds = { ...workout, sets: setsWithIds };
 
       const workoutsRef = collection(db, "users", workout.userId, "workouts");
-      const docRef = await addDoc(workoutsRef, {
-        ...workoutWithSetIds,
+
+      // undefined値を除外してFirestoreに保存
+      const workoutData: any = {
+        userId: workoutWithSetIds.userId,
+        name: workoutWithSetIds.name,
+        date: workoutWithSetIds.date,
+        sets: workoutWithSetIds.sets,
+        memo: workoutWithSetIds.memo || "",
+        tags: workoutWithSetIds.tags || [],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      // 合同トレーニング情報を追加（undefined値を除外）
+      if (workoutWithSetIds.isGroupWorkout !== undefined) {
+        workoutData.isGroupWorkout = workoutWithSetIds.isGroupWorkout;
+      }
+      if (
+        workoutWithSetIds.groupMembers !== undefined &&
+        workoutWithSetIds.groupMembers !== null
+      ) {
+        workoutData.groupMembers = workoutWithSetIds.groupMembers;
+      }
+      if (
+        workoutWithSetIds.groupWorkoutName !== undefined &&
+        workoutWithSetIds.groupWorkoutName !== null
+      ) {
+        workoutData.groupWorkoutName = workoutWithSetIds.groupWorkoutName;
+      }
+
+      const docRef = await addDoc(workoutsRef, workoutData);
 
       return {
         ...workoutWithSetIds,
@@ -148,7 +174,7 @@ export const updateWorkout = async (workout: WorkoutRecord): Promise<void> => {
     if (workout.isGroupWorkout !== undefined) {
       updateData.isGroupWorkout = workout.isGroupWorkout;
     }
-    if (workout.groupMembers !== undefined) {
+    if (workout.groupMembers !== undefined && workout.groupMembers !== null) {
       updateData.groupMembers = workout.groupMembers;
     }
     if (
@@ -170,8 +196,14 @@ export const deleteWorkout = async (
   userId: string,
   id: string
 ): Promise<void> => {
-  const workoutRef = doc(db, "users", userId, "workouts", id);
-  await deleteDoc(workoutRef);
+  try {
+    const workoutRef = doc(db, "users", userId, "workouts", id);
+    await deleteDoc(workoutRef);
+    console.log(`Workout ${id} deleted successfully`);
+  } catch (error) {
+    console.error("Error deleting workout:", error);
+    throw error;
+  }
 };
 
 // ユーザーデータのリセット

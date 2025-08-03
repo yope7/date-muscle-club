@@ -371,9 +371,14 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ isLoading: true, error: null });
         try {
           const newWorkout = await addWorkout(workout);
-          await get().fetchWorkouts(user.uid);
+
+          // 追加後に現在の月のデータを再取得
+          const currentDate = new Date();
+          await get().fetchWorkoutsByMonth(user.uid, currentDate);
+
           set({ isLoading: false });
         } catch (error) {
+          console.error("Error adding workout:", error);
           set({
             error:
               error instanceof Error ? error.message : "Failed to add workout",
@@ -389,9 +394,14 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ isLoading: true, error: null });
         try {
           await updateWorkout(workout);
-          await get().fetchWorkouts(user.uid);
+
+          // 更新後に現在の月のデータを再取得
+          const currentDate = new Date();
+          await get().fetchWorkoutsByMonth(user.uid, currentDate);
+
           set({ isLoading: false });
         } catch (error) {
+          console.error("Error updating workout:", error);
           set({
             error:
               error instanceof Error
@@ -409,9 +419,14 @@ export const useWorkoutStore = create<WorkoutState>()(
         set({ isLoading: true, error: null });
         try {
           await deleteWorkout(user.uid, id);
-          await get().fetchWorkouts(user.uid);
+
+          // 削除後に現在の月のデータを再取得
+          const currentDate = new Date();
+          await get().fetchWorkoutsByMonth(user.uid, currentDate);
+
           set({ isLoading: false });
         } catch (error) {
+          console.error("Error deleting workout:", error);
           set({
             error:
               error instanceof Error

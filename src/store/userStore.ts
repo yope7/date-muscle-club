@@ -11,7 +11,14 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, where, orderBy, limit } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  limit,
+} from "firebase/firestore";
 import { WorkoutRecord } from "@/types/workout";
 
 interface UserState {
@@ -75,37 +82,52 @@ export const useUserStore = create<UserState>((set, get) => ({
 
       const friends: UserProfile[] = [];
       for (const friendId of friendIds) {
-        const friendDoc = await getDoc(doc(db, "users", friendId));
-        if (friendDoc.exists()) {
-          const friendData = friendDoc.data();
-          
-          // 友達のワークアウトデータを取得
-          const workoutsQuery = query(
-            collection(db, "users", friendId, "workouts"),
-            orderBy("date", "desc"),
-            limit(30)
-          );
-          const workoutsSnapshot = await getDocs(workoutsQuery);
-          const workouts = workoutsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-            date: doc.data().date,
-          })) as WorkoutRecord[];
+        try {
+          const friendDoc = await getDoc(doc(db, "users", friendId));
+          if (friendDoc.exists()) {
+            const friendData = friendDoc.data();
 
-          // Googleアカウントの情報を取得
-          const authDoc = await getDoc(doc(db, "auth", friendId));
-          const authData = authDoc.exists() ? authDoc.data() : null;
+            // 友達のワークアウトデータを取得（エラーハンドリング付き）
+            let workouts: WorkoutRecord[] = [];
+            try {
+              const workoutsQuery = query(
+                collection(db, "users", friendId, "workouts"),
+                orderBy("date", "desc"),
+                limit(30)
+              );
+              const workoutsSnapshot = await getDocs(workoutsQuery);
+              workouts = workoutsSnapshot.docs.map((doc) => ({
+                id: doc.id,
+                ...doc.data(),
+                date: doc.data().date,
+              })) as WorkoutRecord[];
+            } catch (workoutError) {
+              console.error("Error fetching friend workouts:", workoutError);
+            }
 
-          const profile: UserProfile = {
-            id: friendId,
-            displayName: authData?.displayName || friendData.displayName || "",
-            username: authData?.displayName || friendData.displayName || "",
-            email: friendData.email || "",
-            photoURL: authData?.photoURL || friendData.photoURL,
-            workouts,
-          };
-          friends.push(profile);
-          get().setProfileById(friendId, profile);
+            // Googleアカウントの情報を取得（エラーハンドリング付き）
+            let authData = null;
+            try {
+              const authDoc = await getDoc(doc(db, "auth", friendId));
+              authData = authDoc.exists() ? authDoc.data() : null;
+            } catch (authError) {
+              console.error("Error fetching friend auth data:", authError);
+            }
+
+            const profile: UserProfile = {
+              id: friendId,
+              displayName:
+                authData?.displayName || friendData.displayName || "",
+              username: authData?.displayName || friendData.displayName || "",
+              email: friendData.email || "",
+              photoURL: authData?.photoURL || friendData.photoURL,
+              workouts,
+            };
+            friends.push(profile);
+            get().setProfileById(friendId, profile);
+          }
+        } catch (friendError) {
+          console.error(`Error processing friend ${friendId}:`, friendError);
         }
       }
 

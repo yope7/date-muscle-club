@@ -55,6 +55,9 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
       }
 
       try {
+        // 認証状態を確認
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+
         // 自分のユーザードキュメントにアクセス
         const userDocRef = doc(db, "users", user.uid);
         const userDoc = await getDoc(userDocRef);

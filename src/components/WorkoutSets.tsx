@@ -166,22 +166,30 @@ export const WorkoutSets = ({
   const confirmDeleteSet = async () => {
     if (setToDelete === null) return;
 
-    const updatedSets = workout.sets.filter(
-      (_, index) => index !== setToDelete
-    );
-    const updatedWorkout: WorkoutRecord = {
-      ...workout,
-      sets: updatedSets,
-      updatedAt: Timestamp.fromDate(new Date()),
-    };
-    // console.log("削除を実行");
-    // console.log("削除対象：", setToDelete);
-    // console.log("更新されたセット：", updatedSets);
-    await updateWorkout(updatedWorkout);
-    setDeleteDialogOpen(false);
-    setSetToDelete(null);
-    if (onUpdate) {
-      onUpdate(updatedWorkout);
+    try {
+      const updatedSets = workout.sets.filter(
+        (_, index) => index !== setToDelete
+      );
+      const updatedWorkout: WorkoutRecord = {
+        ...workout,
+        sets: updatedSets,
+        updatedAt: Timestamp.fromDate(new Date()),
+      };
+
+      console.log("削除を実行");
+      console.log("削除対象：", setToDelete);
+      console.log("更新されたセット：", updatedSets);
+
+      await updateWorkout(updatedWorkout);
+      setDeleteDialogOpen(false);
+      setSetToDelete(null);
+
+      if (onUpdate) {
+        onUpdate(updatedWorkout);
+      }
+    } catch (error) {
+      console.error("Error deleting set:", error);
+      alert("セットの削除に失敗しました");
     }
   };
 
@@ -228,6 +236,11 @@ export const WorkoutSets = ({
       setNewSetDialogOpen(false);
       setBulkSetCount(1);
       setSnackbarOpen(true);
+
+      // 更新後に親コンポーネントに通知
+      if (onUpdate) {
+        onUpdate(updatedWorkout);
+      }
     } catch (error) {
       console.error("Error adding set:", error);
       alert("セットの追加に失敗しました");
