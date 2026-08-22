@@ -34,6 +34,7 @@ import {
   Slider,
   Chip,
   Avatar,
+  LinearProgress,
 } from "@mui/material";
 import {
   ChevronLeft,
@@ -100,6 +101,9 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     useState<WorkoutType | null>(null);
   const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
   const [bulkSetCount, setBulkSetCount] = useState(1);
+  // セット保存中の進捗表示
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
   // 合同トレーニング関連のstate
   const [isGroupWorkout, setIsGroupWorkout] = useState(false);
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<string[]>(
@@ -679,7 +683,10 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   ]);
 
   const handleAddSet = useCallback(async () => {
-    if (!selectedWorkout) return;
+    if (!selectedWorkout || isSaving) return;
+
+    setIsSaving(true);
+    setSaveProgress(15);
 
     let newSets = [];
 
@@ -707,6 +714,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         : "",
     };
 
+    setSaveProgress(45);
+
     try {
       if (selectedWorkout.id && !selectedWorkout.id.startsWith("temp_")) {
         await updateWorkout(updatedWorkout);
@@ -714,35 +723,37 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
         await addWorkout(updatedWorkout);
       }
 
+      // ストア側で楽観的にworkoutsを更新するので、月全体の再取得は不要
       setSelectedWorkout(updatedWorkout);
+      setSaveProgress(100);
       setSnackbarOpen(true);
-
-      // 追加・更新後にカレンダーを更新
-      if (user) {
-        await fetchWorkoutsByMonth(user.uid, currentMonth);
-      }
     } catch (error) {
       console.error("Error adding/updating workout:", error);
+    } finally {
+      // わずかにディレイして完了を見せてからリセット
+      setTimeout(() => {
+        setIsSaving(false);
+        setSaveProgress(0);
+      }, 200);
     }
 
     if (isGroupWorkout && selectedGroupMembers.length > 0) {
+      // 合同トレーニング情報の保存は裏で走らせる（UIをブロックしない）
       setTimeout(() => {
         saveGroupWorkoutState();
       }, 100);
     }
   }, [
     selectedWorkout,
+    isSaving,
     bulkSetCount,
     dialogValues,
     selectedWorkoutType,
     isGroupWorkout,
     selectedGroupMembers,
     currentTeam,
-    user,
-    currentMonth,
     updateWorkout,
     addWorkout,
-    fetchWorkoutsByMonth,
     saveGroupWorkoutState,
   ]);
 
@@ -1197,15 +1208,36 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
             />
           </Box>
         </DialogContent>
+        {isSaving && (
+          <Box sx={{ px: 3, pb: 1 }}>
+            <LinearProgress
+              variant="determinate"
+              value={saveProgress}
+              sx={{ height: 6, borderRadius: 3 }}
+            />
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: "block", mt: 0.5, textAlign: "right" }}
+            >
+              {saveProgress < 100 ? "保存中..." : "完了"}
+            </Typography>
+          </Box>
+        )}
         <DialogActions>
           <Button
             onClick={() => {
               setAddSetDialogOpen(false);
             }}
+            disabled={isSaving}
           >
             キャンセル
           </Button>
-          <Button onClick={handleAddSet} variant="contained">
+          <Button
+            onClick={handleAddSet}
+            variant="contained"
+            disabled={isSaving}
+          >
             {bulkSetCount === 1 ? "追加" : `${bulkSetCount}セット追加`}
           </Button>
         </DialogActions>

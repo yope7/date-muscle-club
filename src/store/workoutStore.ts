@@ -368,22 +368,40 @@ export const useWorkoutStore = create<WorkoutState>()(
         const user = useAuth.getState().user;
         if (!user) return;
 
-        set({ isLoading: true, error: null });
+        const prevWorkouts = get().workouts;
+        set({ error: null });
         try {
           const newWorkout = await addWorkout(workout);
 
-          // 追加後に現在の月のデータを再取得
-          const currentDate = new Date();
-          await get().fetchWorkoutsByMonth(user.uid, currentDate);
-
-          set({ isLoading: false });
+          // 楽観的にローカル状態を更新（月全体の再取得を避けて高速化）
+          // 同じ日付の既存ワークアウトがあれば置き換え、なければ追加
+          const targetDay = newWorkout.date.toDate();
+          const merged = [...prevWorkouts];
+          const existingIdx = merged.findIndex((w) => {
+            if (!(w.date instanceof Timestamp)) return false;
+            const d = w.date.toDate();
+            return (
+              d.getFullYear() === targetDay.getFullYear() &&
+              d.getMonth() === targetDay.getMonth() &&
+              d.getDate() === targetDay.getDate()
+            );
+          });
+          if (existingIdx >= 0) {
+            merged[existingIdx] = newWorkout;
+          } else {
+            merged.unshift(newWorkout);
+            merged.sort(
+              (a, b) => b.date.toDate().getTime() - a.date.toDate().getTime()
+            );
+          }
+          set({ workouts: merged });
         } catch (error) {
           console.error("Error adding workout:", error);
           set({
             error:
               error instanceof Error ? error.message : "Failed to add workout",
-            isLoading: false,
           });
+          throw error;
         }
       },
 
@@ -391,24 +409,27 @@ export const useWorkoutStore = create<WorkoutState>()(
         const user = useAuth.getState().user;
         if (!user) return;
 
-        set({ isLoading: true, error: null });
+        const prevWorkouts = get().workouts;
+        // 楽観的にローカル状態を先に反映（体感即応）
+        set({
+          workouts: prevWorkouts.map((w) =>
+            w.id === workout.id ? workout : w
+          ),
+          error: null,
+        });
         try {
           await updateWorkout(workout);
-
-          // 更新後に現在の月のデータを再取得
-          const currentDate = new Date();
-          await get().fetchWorkoutsByMonth(user.uid, currentDate);
-
-          set({ isLoading: false });
         } catch (error) {
           console.error("Error updating workout:", error);
+          // 失敗時はロールバック
           set({
+            workouts: prevWorkouts,
             error:
               error instanceof Error
                 ? error.message
                 : "Failed to update workout",
-            isLoading: false,
           });
+          throw error;
         }
       },
 
