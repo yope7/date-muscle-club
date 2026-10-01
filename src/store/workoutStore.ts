@@ -32,6 +32,7 @@ interface WorkoutState {
   myPageWorkouts: WorkoutRecord[]; // マイページ専用のデータ（全期間）
   friendWorkouts: WorkoutRecord[];
   isLoading: boolean;
+  isCalendarLoading: boolean; // カレンダー（月別取得）専用のローディング
   isLoadingMore: boolean;
   error: string | null;
   selectedDate: Date | null;
@@ -52,6 +53,8 @@ interface WorkoutState {
   resetData: () => Promise<void>;
 }
 
+let monthRequestSeq = 0;
+
 export const useWorkoutStore = create<WorkoutState>()(
   persist(
     (set, get) => ({
@@ -60,6 +63,7 @@ export const useWorkoutStore = create<WorkoutState>()(
       myPageWorkouts: [], // マイページ専用のデータ（全期間）
       friendWorkouts: [],
       isLoading: false,
+      isCalendarLoading: false,
       isLoadingMore: false,
       error: null,
       selectedDate: null,
@@ -222,7 +226,9 @@ export const useWorkoutStore = create<WorkoutState>()(
       },
 
       fetchWorkoutsByMonth: async (userId: string, date: Date) => {
-        set({ isLoading: true, error: null });
+        // 月を素早く切り替えた時に古いレスポンスで上書きしないよう、最新リクエストのみ反映する
+        const requestId = ++monthRequestSeq;
+        set({ isCalendarLoading: true, error: null });
         try {
           // 指定された月の開始日と終了日を計算
           const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
@@ -273,37 +279,19 @@ export const useWorkoutStore = create<WorkoutState>()(
             workoutData.push(workoutRecord);
           });
 
-          // データの整合性チェック
-          const currentState = get();
-          const hasDataLoss =
-            currentState.workouts.length > 0 && workoutData.length === 0;
-
-          if (hasDataLoss) {
-            console.log("=== Data Loss Detected in fetchWorkoutsByMonth ===");
-            console.log(
-              "Previous workouts count:",
-              currentState.workouts.length
-            );
-            console.log("New workouts count:", workoutData.length);
-            console.log("Attempting to recover data...");
-
-            // データが消えた場合は、より広い範囲で再取得を試行
-            setTimeout(() => {
-              get().fetchWorkoutsByMonth(userId, date);
-            }, 2000);
-          }
-
+          if (requestId !== monthRequestSeq) return;
           set({
             workouts: workoutData,
-            isLoading: false,
+            isCalendarLoading: false,
           });
         } catch (error) {
           console.error("Error fetching workouts by month:", error);
+          if (requestId !== monthRequestSeq) return;
           // エラーが発生した場合でも空の配列を設定
           set({
             workouts: [],
             error: "データの取得中にエラーが発生しました",
-            isLoading: false,
+            isCalendarLoading: false,
           });
         }
       },

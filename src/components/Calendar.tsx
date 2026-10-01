@@ -79,7 +79,7 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     updateWorkout,
     addWorkout,
     fetchWorkoutsByMonth,
-    isLoading,
+    isCalendarLoading: isLoading,
   } = useWorkoutStore();
   const { user } = useAuth();
   const { calendarDisplayMode } = useSettingsStore();
@@ -253,28 +253,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     setMonthWorkouts(monthWorkoutsMemo);
   }, [monthWorkoutsMemo]);
 
-  // データの整合性チェックを軽量化
-  useEffect(() => {
-    if (!user || !workouts || workouts.length === 0) return;
-
-    // 現在の月のデータが不足しているかチェック（軽量化）
-    const currentMonthWorkouts = workouts.filter((workout) => {
-      if (workout.date instanceof Timestamp) {
-        const workoutDate = workout.date.toDate();
-        return (
-          workoutDate.getFullYear() === currentMonth.getFullYear() &&
-          workoutDate.getMonth() === currentMonth.getMonth()
-        );
-      }
-      return false;
-    });
-
-    // データが不足している場合のみ再取得
-    if (currentMonthWorkouts.length === 0) {
-      fetchWorkoutsByMonth(user.uid, currentMonth);
-    }
-  }, [user, workouts, currentMonth, fetchWorkoutsByMonth]);
-
   // カレンダー日付の計算をメモ化
   const calendarData = useMemo(() => {
     const days = ["日", "月", "火", "水", "木", "金", "土"];
@@ -342,23 +320,15 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     [user]
   );
 
-  const handlePrevMonth = useCallback(async () => {
-    const newMonth = subMonths(currentMonth, 1);
-    setCurrentMonth(newMonth);
-    if (user) {
-      await fetchWorkoutsByMonth(user.uid, newMonth);
-      await fetchCalendarGroupWorkoutInfo(user.uid, newMonth);
-    }
-  }, [currentMonth, user, fetchWorkoutsByMonth, fetchCalendarGroupWorkoutInfo]);
+  // データ取得は currentMonth を監視する初期化 useEffect に任せる
+  const handlePrevMonth = useCallback(() => {
+    setCurrentMonth((prev) => subMonths(prev, 1));
+  }, []);
 
-  const handleNextMonth = useCallback(async () => {
-    const newMonth = addMonths(currentMonth, 1);
-    setCurrentMonth(newMonth);
-    if (user) {
-      await fetchWorkoutsByMonth(user.uid, newMonth);
-      await fetchCalendarGroupWorkoutInfo(user.uid, newMonth);
-    }
-  }, [currentMonth, user, fetchWorkoutsByMonth, fetchCalendarGroupWorkoutInfo]);
+  // データ取得は currentMonth を監視する初期化 useEffect に任せる
+  const handleNextMonth = useCallback(() => {
+    setCurrentMonth((prev) => addMonths(prev, 1));
+  }, []);
 
   const handleDateClick = useCallback(
     async (date: Date) => {
@@ -450,30 +420,6 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
       setSelectedWorkout(currentWorkout);
     }
   }, [selectedDate, workouts, selectedWorkout]);
-
-  // 定期的なデータ整合性チェックを軽量化（10秒ごとに変更）
-  useEffect(() => {
-    if (!user || !workouts.length) return;
-
-    const interval = setInterval(() => {
-      const currentMonthData = workouts.filter((w) => {
-        if (w.date instanceof Timestamp) {
-          const workoutDate = w.date.toDate();
-          return (
-            workoutDate.getFullYear() === currentMonth.getFullYear() &&
-            workoutDate.getMonth() === currentMonth.getMonth()
-          );
-        }
-        return false;
-      });
-
-      if (currentMonthData.length === 0 && workouts.length > 0) {
-        fetchWorkoutsByMonth(user.uid, currentMonth);
-      }
-    }, 10000); // 5秒から10秒に変更
-
-    return () => clearInterval(interval);
-  }, [user, workouts, currentMonth, fetchWorkoutsByMonth]);
 
   // 合同トレーニング関連のハンドラー
   const handleGroupWorkoutToggle = useCallback(() => {
@@ -800,7 +746,8 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
     [user, profiles]
   );
 
-  if (loading || isLoading) {
+  // 全画面スピナーは初回のみ。以降の再取得はヘッダーの小さいスピナーで表示
+  if (loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
         <CircularProgress />
