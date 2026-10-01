@@ -44,6 +44,7 @@ import {
   Group as GroupIcon,
   Check as CheckIcon,
   Person as PersonIcon,
+  Mic as MicIcon,
 } from "@mui/icons-material";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { useSettingsStore } from "@/store/settingsStore";
@@ -58,7 +59,15 @@ import { DayGroupWorkoutInfo } from "@/types/workout";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import WhatshotIcon from "@mui/icons-material/Whatshot";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  doc,
+  getDoc,
+} from "firebase/firestore";
+import { AI_ALLOWED_USERS_COLLECTION } from "@/types/voiceWorkout";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { WorkoutRecord } from "@/types/workout";
@@ -66,6 +75,7 @@ import { Timestamp } from "firebase/firestore";
 import { WorkoutSets } from "./WorkoutSets";
 import { NumberPicker } from "./NumberPicker";
 import { WorkoutTypeSelector } from "./WorkoutTypeSelector";
+import { VoiceWorkoutDialog } from "./VoiceWorkoutDialog";
 import { WorkoutType } from "@/data/workoutTypes";
 
 interface CalendarProps {
@@ -97,6 +107,20 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
   const [addSetDialogOpen, setAddSetDialogOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [workoutTypeSelectorOpen, setWorkoutTypeSelectorOpen] = useState(false);
+  const [voiceDialogOpen, setVoiceDialogOpen] = useState(false);
+  const [voiceSnackbarOpen, setVoiceSnackbarOpen] = useState(false);
+  const [isVoiceInputAllowed, setIsVoiceInputAllowed] = useState(false);
+
+  // 管理画面で許可されたユーザーにだけ音声入力ボタンを表示する
+  useEffect(() => {
+    if (!user) {
+      setIsVoiceInputAllowed(false);
+      return;
+    }
+    getDoc(doc(db, AI_ALLOWED_USERS_COLLECTION, user.uid))
+      .then((snap) => setIsVoiceInputAllowed(snap.exists()))
+      .catch(() => setIsVoiceInputAllowed(false));
+  }, [user]);
   const [selectedWorkoutType, setSelectedWorkoutType] =
     useState<WorkoutType | null>(null);
   const [dialogValues, setDialogValues] = useState({ weight: 25, reps: 10 });
@@ -783,9 +807,20 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           </Typography>
           {isLoading && <CircularProgress size={20} />}
         </Box>
-        <IconButton onClick={handleNextMonth} disabled={isLoading}>
-          <ChevronRight />
-        </IconButton>
+        <Box sx={{ display: "flex", alignItems: "center" }}>
+          {isVoiceInputAllowed && (
+            <IconButton
+              onClick={() => setVoiceDialogOpen(true)}
+              color="primary"
+              aria-label="音声で記録"
+            >
+              <MicIcon />
+            </IconButton>
+          )}
+          <IconButton onClick={handleNextMonth} disabled={isLoading}>
+            <ChevronRight />
+          </IconButton>
+        </Box>
       </Box>
 
       <Box
@@ -1337,6 +1372,40 @@ export const Calendar = ({ isDrawerOpen = false }: CalendarProps) => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <VoiceWorkoutDialog
+        open={voiceDialogOpen}
+        onClose={() => setVoiceDialogOpen(false)}
+        onSaved={(date) => {
+          setVoiceSnackbarOpen(true);
+          if (user) {
+            // 登録した日の月を表示して最新データを取り直す
+            if (
+              date.getFullYear() !== currentMonth.getFullYear() ||
+              date.getMonth() !== currentMonth.getMonth()
+            ) {
+              setCurrentMonth(date);
+            } else {
+              fetchWorkoutsByMonth(user.uid, currentMonth);
+            }
+          }
+        }}
+      />
+
+      <Snackbar
+        open={voiceSnackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setVoiceSnackbarOpen(false)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setVoiceSnackbarOpen(false)}
+          severity="success"
+          sx={{ width: "100%" }}
+        >
+          音声入力の内容を登録しました
+        </Alert>
+      </Snackbar>
 
       <Snackbar
         open={snackbarOpen}

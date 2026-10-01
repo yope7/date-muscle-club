@@ -24,6 +24,7 @@ import {
   Divider,
   Tabs,
   Tab,
+  Switch,
 } from "@mui/material";
 import {
   AdminPanelSettings as AdminIcon,
@@ -42,12 +43,16 @@ import {
   getDocs,
   doc,
   updateDoc,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
   writeBatch,
   orderBy,
   limit,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { WorkoutRecord } from "@/types/workout";
+import { AI_ALLOWED_USERS_COLLECTION } from "@/types/voiceWorkout";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 
@@ -99,6 +104,9 @@ export default function AdminPage() {
     null
   );
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
+  const [aiAllowedIds, setAiAllowedIds] = useState<Set<string>>(new Set());
+  const [aiUpdatingId, setAiUpdatingId] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   // 管理者権限チェック
   useEffect(() => {
@@ -120,6 +128,7 @@ export default function AdminPage() {
             // 管理者権限がある場合はユーザー一覧を取得
             console.log("Admin access granted for:", user.email);
             fetchUsers();
+            fetchAiAllowedUsers();
           }
         } else {
           setError("管理者権限がありません");
@@ -152,6 +161,46 @@ export default function AdminPage() {
       console.error("Failed to fetch users:", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 音声入力（AI）機能の許可ユーザーを取得
+  const fetchAiAllowedUsers = async () => {
+    try {
+      const snapshot = await getDocs(collection(db, AI_ALLOWED_USERS_COLLECTION));
+      setAiAllowedIds(new Set(snapshot.docs.map((d) => d.id)));
+    } catch (err) {
+      setAiError("AI機能の許可ユーザーの取得に失敗しました");
+      console.error("Failed to fetch AI allowed users:", err);
+    }
+  };
+
+  const toggleAiAllowed = async (target: User) => {
+    const allowed = aiAllowedIds.has(target.id);
+    setAiUpdatingId(target.id);
+    setAiError(null);
+    try {
+      const ref = doc(db, AI_ALLOWED_USERS_COLLECTION, target.id);
+      if (allowed) {
+        await deleteDoc(ref);
+      } else {
+        await setDoc(ref, {
+          email: target.email || "",
+          grantedBy: user?.uid || "",
+          grantedAt: serverTimestamp(),
+        });
+      }
+      setAiAllowedIds((prev) => {
+        const next = new Set(prev);
+        if (allowed) next.delete(target.id);
+        else next.add(target.id);
+        return next;
+      });
+    } catch (err) {
+      setAiError("AI機能の許可の変更に失敗しました");
+      console.error("Failed to toggle AI permission:", err);
+    } finally {
+      setAiUpdatingId(null);
     }
   };
 
@@ -673,6 +722,48 @@ export default function AdminPage() {
             {maintenanceError}
           </Alert>
         )}
+      </Paper>
+
+      <Paper sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          音声入力（AI）の利用許可
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+          オンにしたユーザーだけがカレンダーの音声入力を使えます
+        </Typography>
+        {aiError && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {aiError}
+          </Alert>
+        )}
+        <List dense>
+          {users.map((u) => (
+            <ListItem
+              key={u.id}
+              secondaryAction={
+                <Switch
+                  edge="end"
+                  checked={aiAllowedIds.has(u.id)}
+                  disabled={aiUpdatingId === u.id}
+                  onChange={() => toggleAiAllowed(u)}
+                  inputProps={{
+                    "aria-label": `${u.displayName || u.email}の音声入力を許可`,
+                  }}
+                />
+              }
+            >
+              <ListItemAvatar>
+                <Avatar src={u.photoURL}>
+                  <PersonIcon />
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={u.displayName || u.email || u.id}
+                secondary={u.email}
+              />
+            </ListItem>
+          ))}
+        </List>
       </Paper>
 
       {/* ユーザー選択ダイアログ */}

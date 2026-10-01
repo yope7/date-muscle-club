@@ -2,8 +2,18 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // ユーザーは自分のデータのみ読み書き可能
+    // isAdmin は本人が付与・変更できないようにする（管理者のみ変更可）
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId &&
+        !('isAdmin' in request.resource.data);
+      allow update: if request.auth != null && request.auth.uid == userId &&
+        request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false);
+    }
+
+    // 音声入力（AI）機能の許可ユーザー。本人は読み取りのみ、付与は管理者のみ
+    match /aiAllowedUsers/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
     }
     
     // ワークアウトデータ
