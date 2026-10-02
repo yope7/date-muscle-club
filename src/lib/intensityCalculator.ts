@@ -1,4 +1,9 @@
 import { WorkoutRecord, WorkoutSet } from "@/types/workout";
+import { isCardioWorkoutType } from "@/lib/workoutTypeInfo";
+
+// 有酸素運動のセット（weight=距離, reps=時間）は重量ベースの強度計算から除外する
+const isStrengthSet = (set: WorkoutSet, workout: WorkoutRecord) =>
+  !isCardioWorkoutType(set.workoutType || workout.name);
 
 // 各ワークアウトタイプの最大重量を管理する型
 export type MaxWeights = {
@@ -104,6 +109,7 @@ export const calculateMaxWeights = (workouts: WorkoutRecord[]): MaxWeights => {
   // 最適化された計算：一度のループで最大重量を計算
   for (const workout of workouts) {
     for (const set of workout.sets) {
+      if (!isStrengthSet(set, workout)) continue;
       const workoutType = set.workoutType || workout.name || "不明";
       if (!maxWeights[workoutType]) {
         maxWeights[workoutType] = set.weight;
@@ -156,6 +162,7 @@ export const calculateWorkoutIntensity = (
   const results: IntensityResult[] = [];
 
   for (const set of workout.sets) {
+      if (!isStrengthSet(set, workout)) continue;
     const workoutType = set.workoutType || workout.name || "不明";
     results.push(calculateSetIntensity(set, workoutType, maxWeights));
   }
@@ -241,6 +248,7 @@ export const calculateMaxWeightsForDate = (
   for (const workout of workouts) {
     if (workout.date.toDate().toDateString() === targetDateKey) {
       for (const set of workout.sets) {
+      if (!isStrengthSet(set, workout)) continue;
         const workoutType = set.workoutType || workout.name || "不明";
         if (!maxWeights[workoutType]) {
           maxWeights[workoutType] = set.weight;
@@ -274,6 +282,7 @@ export const calculateIntensityForDate = (
       dayWorkouts.push(workout);
 
       for (const set of workout.sets) {
+      if (!isStrengthSet(set, workout)) continue;
         const workoutType = set.workoutType || workout.name || "不明";
         if (!dayMaxWeights[workoutType]) {
           dayMaxWeights[workoutType] = set.weight;

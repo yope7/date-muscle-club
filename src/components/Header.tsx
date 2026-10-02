@@ -17,7 +17,6 @@ import {
 } from "@mui/material";
 import {
   Logout as LogoutIcon,
-  Settings as SettingsIcon,
   Menu as MenuIcon,
   AdminPanelSettings as AdminIcon,
   Notifications as NotificationsIcon,
@@ -25,10 +24,6 @@ import {
 import { SettingsDialog } from "./SettingsDialog";
 import { TeamInviteList } from "./TeamInviteList";
 import {
-  collection,
-  query,
-  where,
-  getDocs,
   doc,
   getDoc,
 } from "firebase/firestore";

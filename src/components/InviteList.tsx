@@ -40,7 +40,7 @@ interface InviteListProps {
 
 export const InviteList: React.FC<InviteListProps> = ({ onClose }) => {
   const { user } = useAuth();
-  const { addFriend } = useUserStore();
+  const { acceptFriendInvite } = useUserStore();
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -79,14 +79,8 @@ export const InviteList: React.FC<InviteListProps> = ({ onClose }) => {
     if (!user) return;
 
     try {
-      // 招待のステータスを更新
-      await updateDoc(doc(db, "invites", invite.id), {
-        status: "accepted",
-        updatedAt: serverTimestamp(),
-      });
-
-      // フレンド関係を追加
-      await addFriend(user.uid, invite.fromUserId);
+      // 招待の承諾と双方のフレンド登録はサーバーで行う
+      await acceptFriendInvite(user.uid, invite.id);
 
       setSuccess("招待を承認しました");
       setTimeout(() => {

@@ -2,21 +2,19 @@ import React, { useState, useMemo } from "react";
 import {
   Box,
   Typography,
-  Paper,
   Card,
   CardContent,
   IconButton,
   Chip,
   Stack,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Button,
-  Alert,
 } from "@mui/material";
 import { WorkoutRecord } from "@/types/workout";
+import { getWorkoutTypeInfo } from "@/lib/workoutTypeInfo";
 import { format } from "date-fns";
 import { ja } from "date-fns/locale";
 import {
@@ -24,10 +22,8 @@ import {
   ChevronRight,
   Help as HelpIcon,
 } from "@mui/icons-material";
-import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 import {
   getTotalIntensity,
-  getAverageIntensity,
   getAverageIntensityExcludingNullDays,
   getDaysSinceFirstWorkout,
   calculateMaxWeights,
@@ -165,60 +161,6 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
     ? format(lastWorkout.date.toDate(), "yyyy年M月d日", { locale: ja })
     : "なし";
 
-  // ワークアウトタイプの情報を取得するヘルパー関数
-  const getWorkoutTypeInfo = (typeName: string) => {
-    // まず完全一致で検索
-    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
-
-    // 完全一致が見つからない場合、部分一致で検索
-    if (!workoutType) {
-      workoutType = workoutTypes.find(
-        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
-      );
-    }
-
-    // それでも見つからない場合、筋肉グループを推測
-    if (!workoutType) {
-      const muscleGroupMap: { [key: string]: string } = {
-        胸: "chest",
-        背中: "back",
-        足: "legs",
-        腹筋: "abs",
-        腕: "arms",
-        肩: "arms",
-        有酸素: "cardio",
-        カーディオ: "cardio",
-      };
-
-      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
-        typeName.includes(key)
-      );
-
-      if (matchedMuscleGroup) {
-        return {
-          name: typeName,
-          muscleGroup:
-            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
-            "不明",
-        };
-      }
-    }
-
-    if (workoutType) {
-      const muscleGroup = muscleGroups.find(
-        (mg) => mg.id === workoutType.muscleGroupId
-      );
-      return {
-        name: typeName,
-        muscleGroup: muscleGroup?.name || "不明",
-      };
-    }
-
-    return {
-      name: typeName,
-      muscleGroup: "不明",
-    };
-  };
 
   // よく行うワークアウトタイプを取得
   const frequentWorkoutTypes = useMemo(() => {
@@ -268,21 +210,10 @@ export const WorkoutStats: React.FC<WorkoutStatsProps> = ({ workouts }) => {
   }, [workouts]);
 
   // 選択されたワークアウトタイプの情報を取得
-  const selectedWorkoutTypeInfo = useMemo(() => {
-    if (!selectedWorkoutType) return null;
-
-    const workoutType = workoutTypes.find(
-      (wt) => wt.name === selectedWorkoutType
-    );
-    const muscleGroup = workoutType
-      ? muscleGroups.find((mg) => mg.id === workoutType.muscleGroupId)
-      : null;
-
-    return {
-      name: selectedWorkoutType,
-      muscleGroup: muscleGroup?.name || "不明",
-    };
-  }, [selectedWorkoutType]);
+  const selectedWorkoutTypeInfo = useMemo(
+    () => (selectedWorkoutType ? getWorkoutTypeInfo(selectedWorkoutType) : null),
+    [selectedWorkoutType]
+  );
 
   const stats: Array<{
     title: string;

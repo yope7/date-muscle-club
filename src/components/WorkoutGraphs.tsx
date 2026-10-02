@@ -1,16 +1,13 @@
-import React, { useEffect, useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   Box,
   Typography,
-  CircularProgress,
   Paper,
-  Grid,
   Tabs,
   Tab,
   Card,
   CardContent,
   CardHeader,
-  Divider,
   Chip,
   Stack,
 } from "@mui/material";
@@ -26,22 +23,11 @@ import {
   BarChart,
   Bar,
 } from "recharts";
-import { useAuth } from "@/hooks/useAuth";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
-  onSnapshot,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { getWorkoutTypeInfo } from "@/lib/workoutTypeInfo";
 import { WorkoutRecord } from "@/types/workout";
-import { workoutTypes, muscleGroups } from "@/data/workoutTypes";
 import { format } from "date-fns";
 
 interface WorkoutGraphsProps {
-  userId?: string;
   workouts: WorkoutRecord[];
 }
 
@@ -67,73 +53,11 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
-  userId,
-  workouts,
-}) => {
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [workoutData, setWorkoutData] = useState<any[]>([]);
+export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({ workouts }) => {
   const [tabValue, setTabValue] = useState(0);
   const [selectedWorkoutType, setSelectedWorkoutType] = useState<string | null>(
     null
   );
-
-  // ワークアウトタイプの情報を取得するヘルパー関数（メモ化）
-  const getWorkoutTypeInfo = useCallback((typeName: string) => {
-    // まず完全一致で検索
-    let workoutType = workoutTypes.find((wt) => wt.name === typeName);
-
-    // 完全一致が見つからない場合、部分一致で検索
-    if (!workoutType) {
-      workoutType = workoutTypes.find(
-        (wt) => wt.name.includes(typeName) || typeName.includes(wt.name)
-      );
-    }
-
-    // それでも見つからない場合、筋肉グループを推測
-    if (!workoutType) {
-      const muscleGroupMap: { [key: string]: string } = {
-        胸: "chest",
-        背中: "back",
-        足: "legs",
-        腹筋: "abs",
-        腕: "arms",
-        肩: "arms",
-        有酸素: "cardio",
-        カーディオ: "cardio",
-      };
-
-      const matchedMuscleGroup = Object.entries(muscleGroupMap).find(([key]) =>
-        typeName.includes(key)
-      );
-
-      if (matchedMuscleGroup) {
-        return {
-          name: typeName,
-          muscleGroup:
-            muscleGroups.find((mg) => mg.id === matchedMuscleGroup[1])?.name ||
-            "不明",
-        };
-      }
-    }
-
-    if (workoutType) {
-      const muscleGroup = muscleGroups.find(
-        (mg) => mg.id === workoutType.muscleGroupId
-      );
-      return {
-        name: typeName,
-        muscleGroup: muscleGroup?.name || "不明",
-      };
-    }
-
-    return {
-      name: typeName,
-      muscleGroup: "不明",
-    };
-  }, []);
 
   // ワークアウトデータのハッシュを生成（メモ化の依存関係として使用）
   const workoutsHash = useMemo(() => {
@@ -168,7 +92,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
         muscleGroup: typeInfo.muscleGroup,
       };
     });
-  }, [workouts, getWorkoutTypeInfo]);
+  }, [workouts]);
 
   // 筋肉グループ別の分析（最適化版）
   const muscleGroupAnalysis = useMemo(() => {
@@ -189,7 +113,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
     return Array.from(groupCounts.entries())
       .sort(([, a], [, b]) => b - a)
       .map(([group, count]) => ({ group, count }));
-  }, [workouts, getWorkoutTypeInfo]);
+  }, [workouts]);
 
   // 月別のワークアウト回数（最適化版）
   const monthlyWorkouts = useMemo(() => {
@@ -267,37 +191,6 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
     });
   }, [workouts, selectedWorkoutTypeHash]);
 
-  // データ取得の最適化
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    const targetUserId = userId || user.uid;
-    const workoutsQuery = query(
-      collection(db, "users", targetUserId, "workouts"),
-      orderBy("date", "desc"),
-      limit(30)
-    );
-
-    const unsubscribe = onSnapshot(
-      workoutsQuery,
-      (snapshot) => {
-        // データ処理はprocessedGraphDataで行うため、ここでは最小限の処理のみ
-        setWorkoutData(processedGraphData);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Error fetching workouts:", err);
-        setError("トレーニングデータの取得に失敗しました");
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, userId, processedGraphData]);
-
   // タブ変更ハンドラー（メモ化）
   const handleTabChange = useCallback(
     (event: React.SyntheticEvent, newValue: number) => {
@@ -317,7 +210,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
   const renderGraph = useCallback(
     (dataKey: string, color: string, name: string) => (
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={workoutData}>
+        <LineChart data={processedGraphData}>
           <CartesianGrid strokeDasharray="3 3" />
           <XAxis dataKey="date" />
           <YAxis />
@@ -334,7 +227,7 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
         </LineChart>
       </ResponsiveContainer>
     ),
-    [workoutData]
+    [processedGraphData]
   );
 
   // ワークアウトタイプチャートのレンダリング（メモ化）
@@ -353,22 +246,6 @@ export const WorkoutGraphs: React.FC<WorkoutGraphsProps> = ({
     ),
     [frequentWorkoutTypes]
   );
-
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography color="error">{error}</Typography>
-      </Box>
-    );
-  }
 
   return (
     <Paper sx={{ p: 3 }}>

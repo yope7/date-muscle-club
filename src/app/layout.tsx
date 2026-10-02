@@ -2,8 +2,6 @@ import React from "react";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import ThemeRegistry from "@/lib/registry";
-import { AuthProvider } from "@/providers/AuthProvider";
-import { WorkoutStoreProvider } from "@/providers/WorkoutStoreProvider";
 import { ClientLayout } from "./ClientLayout";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -22,11 +20,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className={inter.className}>
         <ThemeRegistry>
-          <AuthProvider>
-            <WorkoutStoreProvider>
-              <ClientLayout>{children}</ClientLayout>
-            </WorkoutStoreProvider>
-          </AuthProvider>
+          <ClientLayout>{children}</ClientLayout>
         </ThemeRegistry>
       </body>
     </html>

@@ -33,6 +33,7 @@ import {
   ParsedWorkout,
 } from "@/types/voiceWorkout";
 import { WorkoutType } from "@/data/workoutTypes";
+import { postApi } from "@/lib/apiClient";
 import { WorkoutTypeSelector } from "./WorkoutTypeSelector";
 import { WorkoutRecord, WorkoutSet } from "@/types/workout";
 
@@ -143,32 +144,23 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
     setIsParsing(true);
     setError(null);
     try {
-      if (!user) throw new Error("not signed in");
-      const res = await fetch("/api/voice-workout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${await user.getIdToken()}`,
-        },
-        body: JSON.stringify({ text: trimmed }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || "解析に失敗しました");
-        return;
-      }
-      const result = data.workout as ParsedWorkout;
+      const { workout: result } = await postApi<{ workout: ParsedWorkout }>(
+        "/api/voice-workout",
+        { text: trimmed }
+      );
       if (result.exercises.length === 0 && result.unrecognized.length === 0) {
         setError("種目を読み取れませんでした。種目名・重量・回数を話してみてください");
       }
       setParsed(result);
     } catch (e) {
       console.error("Error parsing voice workout:", e);
-      setError("解析に失敗しました。時間をおいて再度お試しください");
+      setError(
+        e instanceof Error ? e.message : "解析に失敗しました。時間をおいて再度お試しください"
+      );
     } finally {
       setIsParsing(false);
     }
-  }, [text, user, stopListening]);
+  }, [text, stopListening]);
 
   const handleRemoveExercise = useCallback((index: number) => {
     setParsed((prev) =>

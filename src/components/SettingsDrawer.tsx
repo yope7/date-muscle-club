@@ -4,7 +4,6 @@ import React, { useState, useEffect } from "react";
 import {
   Drawer,
   List,
-  ListItem,
   ListItemIcon,
   ListItemText,
   Divider,
@@ -17,9 +16,6 @@ import {
   DialogActions,
   Button,
   Box,
-  Switch,
-  Avatar,
-  ListItemAvatar,
   Badge,
 } from "@mui/material";
 import {
@@ -41,7 +37,6 @@ import { SettingsDialog } from "./SettingsDialog";
 import { AboutDialog } from "./AboutDialog";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { InviteFriend } from "./InviteFriend";
-import { useUserStore } from "@/store/userStore";
 import { FriendsList } from "./FriendsList";
 import { InviteList } from "./InviteList";
 import { TeamManagement } from "./TeamManagement";
@@ -57,8 +52,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   open,
   onClose,
 }) => {
-  const { user, isGuest, signOut } = useAuth();
-  const { profile } = useUserStore();
+  const { user, isGuest } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -297,7 +291,7 @@ export const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       >
         <DialogTitle>友達一覧</DialogTitle>
         <DialogContent>
-          <FriendsList onClose={handleFriendsClose} />
+          <FriendsList />
         </DialogContent>
       </Dialog>
       <Dialog

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Typography, Paper, Avatar, Grid, Divider } from "@mui/material";
+import { Box, Typography, Paper, Avatar, Divider } from "@mui/material";
 import { useAuth } from "@/hooks/useAuth";
 import { useUserStore } from "@/store/userStore";
 import { WorkoutGraphs } from "./WorkoutGraphs";
@@ -10,7 +10,8 @@ import { WorkoutHistory } from "./WorkoutHistory";
 export const MyPage: React.FC = () => {
   const { user } = useAuth();
   const { profile } = useUserStore();
-  const { myPageWorkouts, fetchMyPageWorkouts, isLoading } = useWorkoutStore();
+  const { myPageWorkouts, fetchMyPageWorkouts, isMyPageLoading } =
+    useWorkoutStore();
 
   // マイページ用のデータを取得
   React.useEffect(() => {
@@ -53,8 +54,8 @@ export const MyPage: React.FC = () => {
           <WorkoutGraphs workouts={myPageWorkouts} />
           <WorkoutHistory
             workouts={myPageWorkouts}
-            onFetchData={user ? () => fetchMyPageWorkouts(user.uid) : undefined}
-            isLoading={isLoading}
+            onFetchData={() => fetchMyPageWorkouts(user.uid, { force: true })}
+            isLoading={isMyPageLoading}
           />
         </Box>
       </Paper>

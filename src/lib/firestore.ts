@@ -13,39 +13,19 @@ import {
   QueryDocumentSnapshot,
   serverTimestamp,
   writeBatch,
-  collectionGroup,
   setDoc,
   getDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import {
-  Workout,
   WorkoutSet,
   WorkoutRecord,
   DayGroupWorkoutInfo,
 } from "@/types/workout";
+import { toWorkoutRecord } from "./workoutConverter";
 
-// ワークアウトデータの型変換
-const convertWorkoutData = (
-  doc: QueryDocumentSnapshot<DocumentData>
-): WorkoutRecord => {
-  const data = doc.data();
-  return {
-    id: doc.id,
-    userId: data.userId,
-    name: data.name,
-    date: data.date,
-    sets: data.sets,
-    memo: data.memo || "",
-    tags: data.tags || [],
-    createdAt: data.createdAt,
-    updatedAt: data.updatedAt,
-    // 合同トレーニング情報を追加
-    isGroupWorkout: data.isGroupWorkout || false,
-    groupMembers: data.groupMembers || [],
-    groupWorkoutName: data.groupWorkoutName || "",
-  };
-};
+const convertWorkoutData = (doc: QueryDocumentSnapshot<DocumentData>) =>
+  toWorkoutRecord(doc.id, doc.data());
 
 // ワークアウトデータの取得
 export const fetchWorkouts = async (
@@ -70,17 +50,18 @@ export const addWorkout = async (
     );
 
     if (existingWorkout) {
-      // 既存のワークアウトがある場合は更新
-      const newSet = workout.sets[workout.sets.length - 1];
-      const newSetWithId: WorkoutSet = {
-        ...newSet,
-        id: newSet.id || crypto.randomUUID(), // 新しいセットにIDがなければ付与
-      };
+      // 既存のワークアウトがある場合は、まだ保存されていないセットをすべて追加する
+      // （以前は最後の1セットだけを追加していたため、まとめて追加すると取りこぼしていた）
+      const existingIds = new Set(
+        existingWorkout.sets.map((set) => set.id).filter(Boolean)
+      );
+      const newSets: WorkoutSet[] = workout.sets
+        .filter((set) => !set.id || !existingIds.has(set.id))
+        .map((set) => ({ ...set, id: set.id || crypto.randomUUID() }));
 
       const updatedWorkout: WorkoutRecord = {
         ...existingWorkout,
-        // 既存のセットと、IDを付与した新しいセットをマージ
-        sets: [...existingWorkout.sets, newSetWithId],
+        sets: [...existingWorkout.sets, ...newSets],
         memo: workout.memo || existingWorkout.memo,
         tags: [...new Set([...existingWorkout.tags, ...workout.tags])],
         // 合同トレーニング情報を保持（新しい情報がある場合は更新）
@@ -199,24 +180,28 @@ export const deleteWorkout = async (
   try {
     const workoutRef = doc(db, "users", userId, "workouts", id);
     await deleteDoc(workoutRef);
-    console.log(`Workout ${id} deleted successfully`);
   } catch (error) {
     console.error("Error deleting workout:", error);
     throw error;
   }
 };
 
-// ユーザーデータのリセット
+// ユーザーデータのリセット（ワークアウトと合同トレーニング情報を削除）
+const BATCH_LIMIT = 500;
+
 export const resetUserData = async (userId: string): Promise<void> => {
-  const workoutsRef = collection(db, "users", userId, "workouts");
-  const snapshot = await getDocs(workoutsRef);
+  const snapshots = await Promise.all([
+    getDocs(collection(db, "users", userId, "workouts")),
+    getDocs(collection(db, "users", userId, "dayGroupWorkouts")),
+  ]);
+  const refs = snapshots.flatMap((snapshot) => snapshot.docs.map((d) => d.ref));
 
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((doc) => {
-    batch.delete(doc.ref);
-  });
-
-  await batch.commit();
+  // 1回のバッチは500件までなので分割してコミットする
+  for (let i = 0; i < refs.length; i += BATCH_LIMIT) {
+    const batch = writeBatch(db);
+    refs.slice(i, i + BATCH_LIMIT).forEach((ref) => batch.delete(ref));
+    await batch.commit();
+  }
 };
 
 // 特定の日付のワークアウトを取得
@@ -245,35 +230,6 @@ export const getWorkoutByDate = async (
     return convertWorkoutData(latestWorkout);
   } catch (error) {
     console.error("Error fetching workout by date:", error);
-    throw error;
-  }
-};
-
-// テストデータの追加
-export const addTestWorkout = async (userId: string): Promise<string> => {
-  try {
-    const workoutData: WorkoutRecord = {
-      id: crypto.randomUUID(),
-      userId,
-      name: "テストワークアウト",
-      date: Timestamp.fromDate(new Date()),
-      sets: [
-        { weight: 60, reps: 10, workoutType: "テスト" },
-        { weight: 70, reps: 8, workoutType: "テスト" },
-        { weight: 80, reps: 5, workoutType: "テスト" },
-      ],
-      memo: "テスト記録",
-      tags: ["テスト"],
-      createdAt: Timestamp.fromDate(new Date()),
-      updatedAt: Timestamp.fromDate(new Date()),
-    };
-
-    const workoutsRef = collection(db, "users", userId, "workouts");
-    const docRef = await addDoc(workoutsRef, workoutData);
-    console.log("テストデータを追加しました:", docRef.id);
-    return docRef.id;
-  } catch (error) {
-    console.error("テストデータの追加に失敗しました:", error);
     throw error;
   }
 };
@@ -310,10 +266,6 @@ export const saveDayGroupWorkoutInfo = async (
     }
 
     await setDoc(dayGroupWorkoutRef, dataToSave);
-    console.log(
-      `日付 ${date} の合同トレーニング情報を保存しました:`,
-      dataToSave
-    );
   } catch (error) {
     console.error("Error saving day group workout info:", error);
     throw error;
@@ -357,16 +309,13 @@ export const getDayGroupWorkoutInfo = async (
   }
 };
 
-// 月の合同トレーニング情報を一括取得
-export const getMonthGroupWorkoutInfo = async (
+// 期間内（YYYY-MM-DD 文字列の範囲）の合同トレーニング情報を一括取得
+export const getGroupWorkoutInfoInRange = async (
   userId: string,
-  year: number,
-  month: number
+  startDate: string,
+  endDate: string
 ): Promise<DayGroupWorkoutInfo[]> => {
   try {
-    const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = `${year}-${String(month).padStart(2, "0")}-31`;
-
     const dayGroupWorkoutsRef = collection(
       db,
       "users",

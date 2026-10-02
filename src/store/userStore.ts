@@ -4,40 +4,50 @@ import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
-  deleteDoc,
-  arrayUnion,
-  arrayRemove,
   serverTimestamp,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import {
   collection,
   getDocs,
   query,
-  where,
   orderBy,
   limit,
+  DocumentData,
 } from "firebase/firestore";
-import { WorkoutRecord } from "@/types/workout";
+import { db } from "@/lib/firebase";
+import { postApi } from "@/lib/apiClient";
+import { toWorkoutRecord } from "@/lib/workoutConverter";
 
 interface UserState {
   profile: UserProfile | null;
   friends: UserProfile[];
   profiles: { [key: string]: UserProfile };
+  friendsLoadedFor: string | null;
   setProfile: (profile: UserProfile | null) => void;
   setFriends: (friends: UserProfile[]) => void;
   setProfileById: (id: string, profile: UserProfile) => void;
   fetchProfile: (userId: string) => Promise<void>;
-  fetchFriends: (userId: string) => Promise<void>;
-  addFriend: (userId: string, friendId: string) => Promise<void>;
+  // 複数の画面から呼ばれるため、取得済みなら force しない限り再取得しない
+  fetchFriends: (userId: string, options?: { force?: boolean }) => Promise<void>;
+  loadFriendWorkouts: (friendId: string) => Promise<void>;
+  acceptFriendInvite: (userId: string, inviteId: string) => Promise<void>;
   removeFriend: (userId: string, friendId: string) => Promise<void>;
 }
+
+const toProfile = (id: string, data: DocumentData): UserProfile => ({
+  id,
+  displayName: data.displayName || "",
+  username: data.displayName || "",
+  email: data.email || "",
+  photoURL: data.photoURL,
+});
+
+// 同じユーザーのフレンド取得が同時に走らないようにする
+let friendsRequest: { userId: string; promise: Promise<void> } | null = null;
 
 export const useUserStore = create<UserState>((set, get) => ({
   profile: null,
   friends: [],
   profiles: {},
+  friendsLoadedFor: null,
   setProfile: (profile) => set({ profile }),
   setFriends: (friends) => set({ friends }),
   setProfileById: (id, profile) =>
@@ -48,14 +58,7 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       const userDoc = await getDoc(doc(db, "users", userId));
       if (userDoc.exists()) {
-        const data = userDoc.data();
-        const profile: UserProfile = {
-          id: userId,
-          displayName: data.displayName || "",
-          username: data.displayName || "",
-          email: data.email || "",
-          photoURL: data.photoURL,
-        };
+        const profile = toProfile(userId, userDoc.data());
         set({ profile });
         get().setProfileById(userId, profile);
       }
@@ -63,116 +66,96 @@ export const useUserStore = create<UserState>((set, get) => ({
       console.error("Error fetching profile:", error);
     }
   },
-  fetchFriends: async (userId: string) => {
-    try {
-      const userDoc = await getDoc(doc(db, "users", userId));
-      if (!userDoc.exists()) {
-        // ユーザードキュメントが存在しない場合は新規作成
-        await setDoc(doc(db, "users", userId), {
-          friends: [],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-        set({ friends: [] });
-        return;
-      }
+  fetchFriends: async (userId: string, options) => {
+    if (!options?.force && get().friendsLoadedFor === userId) return;
+    if (friendsRequest?.userId === userId) return friendsRequest.promise;
 
-      const data = userDoc.data();
-      const friendIds = data.friends || [];
-
-      const friends: UserProfile[] = [];
-      for (const friendId of friendIds) {
-        try {
-          const friendDoc = await getDoc(doc(db, "users", friendId));
-          if (friendDoc.exists()) {
-            const friendData = friendDoc.data();
-
-            // 友達のワークアウトデータを取得（エラーハンドリング付き）
-            let workouts: WorkoutRecord[] = [];
-            try {
-              const workoutsQuery = query(
-                collection(db, "users", friendId, "workouts"),
-                orderBy("date", "desc"),
-                limit(30)
-              );
-              const workoutsSnapshot = await getDocs(workoutsQuery);
-              workouts = workoutsSnapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-                date: doc.data().date,
-              })) as WorkoutRecord[];
-            } catch (workoutError) {
-              console.error("Error fetching friend workouts:", workoutError);
-            }
-
-            // Googleアカウントの情報を取得（エラーハンドリング付き）
-            let authData = null;
-            try {
-              const authDoc = await getDoc(doc(db, "auth", friendId));
-              authData = authDoc.exists() ? authDoc.data() : null;
-            } catch (authError) {
-              console.error("Error fetching friend auth data:", authError);
-            }
-
-            const profile: UserProfile = {
-              id: friendId,
-              displayName:
-                authData?.displayName || friendData.displayName || "",
-              username: authData?.displayName || friendData.displayName || "",
-              email: friendData.email || "",
-              photoURL: authData?.photoURL || friendData.photoURL,
-              workouts,
-            };
-            friends.push(profile);
-            get().setProfileById(friendId, profile);
-          }
-        } catch (friendError) {
-          console.error(`Error processing friend ${friendId}:`, friendError);
+    const promise = (async () => {
+      try {
+        const userDoc = await getDoc(doc(db, "users", userId));
+        if (!userDoc.exists()) {
+          // ユーザードキュメントが存在しない場合は新規作成
+          await setDoc(doc(db, "users", userId), {
+            friends: [],
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          set({ friends: [], friendsLoadedFor: userId });
+          return;
         }
-      }
 
-      set({ friends });
-    } catch (error) {
-      console.error("Error fetching friends:", error);
-      set({ friends: [] });
+        const friendIds: string[] = userDoc.data().friends || [];
+        // 相手が自分をフレンドから外している場合は読めないので除外する
+        const results = await Promise.all(
+          friendIds.map(async (friendId) => {
+            try {
+              const friendDoc = await getDoc(doc(db, "users", friendId));
+              return friendDoc.exists()
+                ? toProfile(friendId, friendDoc.data())
+                : null;
+            } catch (error) {
+              console.error(`Error fetching friend ${friendId}:`, error);
+              return null;
+            }
+          })
+        );
+        const friends = results.filter((f): f is UserProfile => f !== null);
+
+        set((state) => ({
+          friends,
+          friendsLoadedFor: userId,
+          profiles: {
+            ...state.profiles,
+            ...Object.fromEntries(
+              friends.map((f) => [
+                f.id,
+                { ...state.profiles[f.id], ...f },
+              ])
+            ),
+          },
+        }));
+      } catch (error) {
+        console.error("Error fetching friends:", error);
+        set({ friends: [] });
+      }
+    })();
+
+    friendsRequest = { userId, promise };
+    try {
+      await promise;
+    } finally {
+      friendsRequest = null;
     }
   },
-  addFriend: async (userId: string, friendId: string) => {
+  // フレンドのプロフィール表示用に直近のワークアウトを取得する
+  loadFriendWorkouts: async (friendId: string) => {
     try {
-      // 自分のドキュメントにフレンドを追加
-      await updateDoc(doc(db, "users", userId), {
-        friends: arrayUnion(friendId),
-      });
-
-      // 相手のドキュメントにも自分をフレンドとして追加
-      await updateDoc(doc(db, "users", friendId), {
-        friends: arrayUnion(userId),
-      });
-
-      // フレンドリストを再取得
-      await get().fetchFriends(userId);
+      const snapshot = await getDocs(
+        query(
+          collection(db, "users", friendId, "workouts"),
+          orderBy("date", "desc"),
+          limit(30)
+        )
+      );
+      const workouts = snapshot.docs.map((d) =>
+        toWorkoutRecord(d.id, d.data(), friendId)
+      );
+      set((state) => ({
+        profiles: {
+          ...state.profiles,
+          [friendId]: { ...state.profiles[friendId], workouts },
+        },
+      }));
     } catch (error) {
-      console.error("Error adding friend:", error);
-      throw error;
+      console.error("Error fetching friend workouts:", error);
     }
+  },
+  acceptFriendInvite: async (userId: string, inviteId: string) => {
+    await postApi("/api/friends/accept", { inviteId });
+    await get().fetchFriends(userId, { force: true });
   },
   removeFriend: async (userId: string, friendId: string) => {
-    try {
-      // 自分のドキュメントからフレンドを削除
-      await updateDoc(doc(db, "users", userId), {
-        friends: arrayRemove(friendId),
-      });
-
-      // 相手のドキュメントからも自分を削除
-      await updateDoc(doc(db, "users", friendId), {
-        friends: arrayRemove(userId),
-      });
-
-      // フレンドリストを再取得
-      await get().fetchFriends(userId);
-    } catch (error) {
-      console.error("Error removing friend:", error);
-      throw error;
-    }
+    await postApi("/api/friends/remove", { friendId });
+    await get().fetchFriends(userId, { force: true });
   },
 }));

@@ -33,7 +33,6 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
-  List as ListIcon,
 } from "@mui/icons-material";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -42,7 +41,6 @@ import {
   where,
   getDocs,
   doc,
-  updateDoc,
   setDoc,
   deleteDoc,
   serverTimestamp,

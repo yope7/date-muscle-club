@@ -1,76 +1,153 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ユーザーは自分のデータのみ読み書き可能
-    // isAdmin は本人が付与・変更できないようにする（管理者のみ変更可）
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    // userId のユーザーが自分をフレンドに登録しているか
+    function isFriendOf(userId) {
+      return signedIn() &&
+        request.auth.uid in get(/databases/$(database)/documents/users/$(userId)).data.get('friends', []);
+    }
+
+    // 変更されたフィールドが keys のみか
+    function onlyChanges(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // teamMembers のドキュメントIDは「チームID_ユーザーID」
+    function memberPath(teamId) {
+      return /databases/$(database)/documents/teamMembers/$(teamId + '_' + request.auth.uid);
+    }
+
+    function isTeamMember(teamId) {
+      return signedIn() && exists(memberPath(teamId));
+    }
+
+    function isTeamAdmin(teamId) {
+      return isTeamMember(teamId) && get(memberPath(teamId)).data.role in ['owner', 'admin'];
+    }
+
+    // ユーザー情報: 本人とフレンドが読める。isAdmin は本人が付与・変更できない
     match /users/{userId} {
-      allow read, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId &&
-        !('isAdmin' in request.resource.data);
-      allow update: if request.auth != null && request.auth.uid == userId &&
+      allow read: if isSelf(userId) || (signedIn() && request.auth.uid in resource.data.get('friends', []));
+      allow delete: if isSelf(userId);
+      allow create: if isSelf(userId) && !('isAdmin' in request.resource.data);
+      allow update: if isSelf(userId) &&
         request.resource.data.get('isAdmin', false) == resource.data.get('isAdmin', false);
+    }
+
+    // ワークアウト: 本人は読み書き、フレンドは読み取りのみ
+    match /users/{userId}/workouts/{workoutId} {
+      allow read: if isSelf(userId) || isFriendOf(userId);
+      allow write: if isSelf(userId);
+    }
+
+    // 日付ごとの合同トレーニング情報（本人のみ）
+    match /users/{userId}/dayGroupWorkouts/{dateKey} {
+      allow read, write: if isSelf(userId);
     }
 
     // 音声入力（AI）機能の許可ユーザー。本人は読み取りのみ、付与は管理者のみ
     match /aiAllowedUsers/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if isSelf(userId);
     }
-    
-    // ワークアウトデータ
-    match /users/{userId}/workouts/{workoutId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // いいねデータ
+
+    // いいね: ドキュメントIDは「ワークアウトID_ユーザーID」。作成・削除は本人のみ
     match /likes/{likeId} {
-      allow read, write: if request.auth != null;
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.workoutId is string &&
+        likeId == request.resource.data.workoutId + '_' + request.auth.uid;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
-    
-    // コメントデータ
+
+    // コメント: 作成・削除は本人のみ（システムコメントはサーバーが投稿する）
     match /comments/{commentId} {
-      allow read, write: if request.auth != null;
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.workoutId is string &&
+        request.resource.data.content is string &&
+        request.resource.data.content.size() > 0 &&
+        request.resource.data.content.size() <= 500;
+      allow delete: if signedIn() && resource.data.userId == request.auth.uid;
     }
-    
-    // チームデータ
+
+    // フレンド招待: 承諾はサーバー（/api/friends/accept）で行う
+    match /invites/{inviteId} {
+      allow read: if signedIn() && (
+        resource.data.fromUserId == request.auth.uid ||
+        resource.data.toEmail == request.auth.token.email
+      );
+      allow create: if signedIn() &&
+        request.resource.data.fromUserId == request.auth.uid &&
+        request.resource.data.toEmail is string &&
+        request.resource.data.status == 'pending';
+      allow update: if signedIn() &&
+        resource.data.toEmail == request.auth.token.email &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'rejected' &&
+        onlyChanges(['status', 'updatedAt']);
+      allow delete: if signedIn() && resource.data.fromUserId == request.auth.uid;
+    }
+
+    // チーム: 読み取りはメンバー、変更はオーナー・管理者
     match /teams/{teamId} {
-      allow read: if request.auth != null && 
-        exists(/databases/$(database)/documents/teamMembers/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/teamMembers/$(request.auth.uid)).data.teamId == teamId;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null && 
-        exists(/databases/$(database)/documents/teamMembers/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/teamMembers/$(request.auth.uid)).data.teamId == teamId &&
-        get(/databases/$(database)/documents/teamMembers/$(request.auth.uid)).data.role in ['owner', 'admin'];
+      allow read: if isTeamMember(teamId);
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isTeamAdmin(teamId);
     }
-    
-    // チームメンバーデータ
+
+    // チームメンバー: 作成はチーム作成者のオーナー登録のみ（招待からの参加はサーバーで行う）
     match /teamMembers/{memberId} {
-      allow read, write: if request.auth != null;
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        memberId == request.resource.data.teamId + '_' + request.auth.uid &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.role == 'owner' &&
+        get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.createdBy == request.auth.uid;
+      allow update: if isTeamAdmin(resource.data.teamId) &&
+        onlyChanges(['role']) &&
+        request.resource.data.role in ['admin', 'member'];
+      allow delete: if signedIn() && (
+        resource.data.userId == request.auth.uid ||
+        isTeamAdmin(resource.data.teamId)
+      );
     }
-    
-    // チーム招待データ
+
+    // チーム招待: 送信はメンバーのみ。承諾はサーバー（/api/teams/accept-invite）で行う
     match /teamInvites/{inviteId} {
-      allow read: if request.auth != null && (
+      allow read: if signedIn() && (
         resource.data.fromUserId == request.auth.uid ||
         resource.data.toUserId == request.auth.uid
       );
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && (
+      allow create: if signedIn() &&
+        request.resource.data.fromUserId == request.auth.uid &&
+        request.resource.data.toUserId is string &&
+        request.resource.data.status == 'pending' &&
+        isTeamMember(request.resource.data.teamId);
+      allow update: if signedIn() &&
+        resource.data.toUserId == request.auth.uid &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status == 'rejected' &&
+        onlyChanges(['status', 'updatedAt']);
+      allow delete: if signedIn() && (
         resource.data.fromUserId == request.auth.uid ||
-        resource.data.toUserId == request.auth.uid
+        isTeamAdmin(resource.data.teamId)
       );
     }
-    
-    // 合同トレーニング情報
-    match /users/{userId}/groupWorkoutInfo/{dateKey} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-    
+
     // 管理者は全データにアクセス可能
     match /{document=**} {
-      allow read, write: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+      allow read, write: if signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('isAdmin', false) == true;
     }
   }
-} 
+}

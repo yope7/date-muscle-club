@@ -8,13 +8,15 @@ import {
   getDoc,
   query,
   where,
-  Timestamp,
   orderBy,
   serverTimestamp,
   writeBatch,
+  setDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Team, TeamMember, TeamInvite } from "@/types/team";
+import { teamMemberDocId } from "./teamIds";
+import { postApi } from "./apiClient";
 
 // チーム作成
 export const createTeam = async (
@@ -67,27 +69,22 @@ export const getUserTeams = async (userId: string): Promise<Team[]> => {
 
   const teamIds = membershipsSnapshot.docs.map((doc) => doc.data().teamId);
 
-  if (teamIds.length === 0) return [];
-
-  // チーム情報を取得
-  const teams: Team[] = [];
-  for (const teamId of teamIds) {
-    const team = await getTeam(teamId);
-    if (team) teams.push(team);
-  }
-
-  return teams;
+  // チーム情報を並列で取得
+  const teams = await Promise.all(teamIds.map((teamId) => getTeam(teamId)));
+  return teams.filter((team): team is Team => team !== null);
 };
 
-// チームメンバー追加
+// チームメンバー追加（ルール上、クライアントから追加できるのはチーム作成者のオーナー登録のみ）
 export const addTeamMember = async (
   member: Omit<TeamMember, "joinedAt">
 ): Promise<void> => {
-  const membersRef = collection(db, "teamMembers");
-  await addDoc(membersRef, {
-    ...member,
-    joinedAt: serverTimestamp(),
-  });
+  await setDoc(
+    doc(db, "teamMembers", teamMemberDocId(member.teamId, member.userId)),
+    {
+      ...member,
+      joinedAt: serverTimestamp(),
+    }
+  );
 };
 
 // チームメンバー取得
@@ -113,17 +110,7 @@ export const removeTeamMember = async (
   teamId: string,
   userId: string
 ): Promise<void> => {
-  const membersRef = collection(db, "teamMembers");
-  const memberQuery = query(
-    membersRef,
-    where("teamId", "==", teamId),
-    where("userId", "==", userId)
-  );
-
-  const snapshot = await getDocs(memberQuery);
-  if (!snapshot.empty) {
-    await deleteDoc(doc(db, "teamMembers", snapshot.docs[0].id));
-  }
+  await deleteDoc(doc(db, "teamMembers", teamMemberDocId(teamId, userId)));
 };
 
 // チーム招待作成
@@ -167,44 +154,26 @@ export const getTeamInvites = async (userId: string): Promise<TeamInvite[]> => {
   }));
 };
 
-// チーム招待更新
+// チーム招待への返答（承諾はメンバー追加を伴うためサーバーで行う）
 export const updateTeamInvite = async (
   inviteId: string,
   status: "accepted" | "rejected"
 ): Promise<void> => {
-  // 招待情報を取得
-  const inviteDoc = await getDoc(doc(db, "teamInvites", inviteId));
-  if (!inviteDoc.exists()) {
-    throw new Error("招待が見つかりません");
+  if (status === "accepted") {
+    await postApi("/api/teams/accept-invite", { inviteId });
+    return;
   }
-
-  const inviteData = inviteDoc.data();
-  const { teamId, toUserId } = inviteData;
-
-  // 招待のステータスを更新
   await updateDoc(doc(db, "teamInvites", inviteId), {
     status,
     updatedAt: serverTimestamp(),
   });
-
-  // 招待が承認された場合、チームメンバーとして追加
-  if (status === "accepted") {
-    console.log("Adding team member:", {
-      userId: toUserId,
-      teamId: teamId,
-      role: "member",
-    });
-    await addTeamMember({
-      userId: toUserId,
-      teamId: teamId,
-      role: "member",
-    });
-    console.log("Team member added successfully");
-  }
 };
 
 // チーム削除
-export const deleteTeam = async (teamId: string): Promise<void> => {
+export const deleteTeam = async (
+  teamId: string,
+  userId: string
+): Promise<void> => {
   const batch = writeBatch(db);
 
   // チームメンバーを削除
@@ -215,9 +184,13 @@ export const deleteTeam = async (teamId: string): Promise<void> => {
     batch.delete(doc.ref);
   });
 
-  // チーム招待を削除
+  // 自分が送ったチーム招待を削除（他人の招待はルール上読めない）
   const invitesRef = collection(db, "teamInvites");
-  const invitesQuery = query(invitesRef, where("teamId", "==", teamId));
+  const invitesQuery = query(
+    invitesRef,
+    where("teamId", "==", teamId),
+    where("fromUserId", "==", userId)
+  );
   const invitesSnapshot = await getDocs(invitesQuery);
   invitesSnapshot.docs.forEach((doc) => {
     batch.delete(doc.ref);

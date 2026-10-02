@@ -14,7 +14,6 @@ import {
   Alert,
   CircularProgress,
   Checkbox,
-  Box,
 } from "@mui/material";
 import { useTeamStore } from "@/store/teamStore";
 import { useUserStore } from "@/store/userStore";

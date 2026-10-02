@@ -1,156 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import {
-  Box,
-  Typography,
-  Paper,
-  CircularProgress,
-  Alert,
-  Button,
-  Dialog,
-  DialogContent,
-  useTheme,
-  useMediaQuery,
-  Tabs,
-  Tab,
-  Slide,
-  SwipeableDrawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  ListItemButton,
-  IconButton,
-} from "@mui/material";
-import { useAuth } from "@/hooks/useAuth";
-import {
-  collection,
-  query,
-  orderBy,
-  onSnapshot,
-  doc,
-  deleteDoc,
-} from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { WorkoutRecord } from "@/types/workout";
-
-import { Calendar } from "@/components/Calendar";
-import { useWorkoutStore } from "@/store/workoutStore";
-import { format, isSameDay } from "date-fns";
-import { ja } from "date-fns/locale";
-import { Add as AddIcon } from "@mui/icons-material";
-import { useDrawerStore } from "@/store/drawerStore";
-import { Feed } from "@/components/Feed";
-import {
-  Settings as SettingsIcon,
-  Notifications as NotificationsIcon,
-  Palette as PaletteIcon,
-  Language as LanguageIcon,
-  Help as HelpIcon,
-  Info as InfoIcon,
-  Close as CloseIcon,
-  Person as PersonIcon,
-  Logout as LogoutIcon,
-} from "@mui/icons-material";
-import Link from "next/link";
-import { useUserStore } from "@/store/userStore";
-import { SettingsDrawer } from "@/components/SettingsDrawer";
-import { MyPage } from "@/components/MyPage";
+import React, { useState } from "react";
+import { Alert, Box, Tab, Tabs } from "@mui/material";
 import { useSwipeable } from "react-swipeable";
+import { useAuth } from "@/hooks/useAuth";
+import { Calendar } from "@/components/Calendar";
+import { Feed } from "@/components/Feed";
+import { MyPage } from "@/components/MyPage";
 import { LoginForm } from "@/components/LoginForm";
+import { LoginRequired } from "@/components/LoginRequired";
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`simple-tabpanel-${index}`}
-      aria-labelledby={`simple-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 2 }}>{children}</Box>}
-    </div>
-  );
-}
+const TAB_COUNT = 3;
 
 export default function Home() {
-  const { user, signOut, isGuest, signInWithGoogle } = useAuth();
-  const { feedWorkouts, fetchWorkouts, selectedDate, isLoading } =
-    useWorkoutStore();
-  const { isDrawerOpen } = useDrawerStore();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [localWorkouts, setLocalWorkouts] = useState<WorkoutRecord[]>([]);
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [value, setValue] = useState(0);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
-  const { profile, fetchProfile, friends } = useUserStore();
-
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    // 初期化時はフィード用のデータを取得
-    fetchWorkouts(user.uid);
-    setLoading(false);
-  }, [user, fetchWorkouts]);
-
-  useEffect(() => {
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-
-    fetchProfile(user.uid);
-    // フィード用のデータを取得
-    fetchWorkouts(user.uid);
-  }, [user, fetchProfile, fetchWorkouts]);
-
-  const selectedWorkout = selectedDate
-    ? localWorkouts.find((w) => {
-        const workoutDate = w.date.toDate();
-        return isSameDay(workoutDate, selectedDate);
-      })
-    : null;
-
-  const handleDelete = async (workout: WorkoutRecord) => {
-    if (!user || !workout.id) return;
-    try {
-      await deleteDoc(doc(db, "users", user.uid, "workouts", workout.id));
-    } catch (error) {
-      console.error("Error deleting workout:", error);
-      setError("削除中にエラーが発生しました");
-    }
-  };
-
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
-    setValue(newValue);
-  };
+  const { user, isGuest } = useAuth();
+  const [tab, setTab] = useState(0);
 
   const handlers = useSwipeable({
-    onSwipedLeft: () => {
-      if (value < 2) {
-        setValue(value + 1);
-      }
-    },
-    onSwipedRight: () => {
-      if (value > 0) {
-        setValue(value - 1);
-      }
-    },
+    onSwipedLeft: () => setTab((t) => Math.min(t + 1, TAB_COUNT - 1)),
+    onSwipedRight: () => setTab((t) => Math.max(t - 1, 0)),
     preventScrollOnSwipe: true,
     trackMouse: true,
     delta: 50, // px
@@ -171,22 +39,6 @@ export default function Home() {
     );
   }
 
-  if (loading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
-
   return (
     <Box
       sx={{
@@ -203,19 +55,13 @@ export default function Home() {
           ゲストログイン中です。記録は保存されません。
         </Alert>
       )}
-      <SettingsDrawer open={isDrawerOpen} onClose={() => {}} />
       <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs
-          value={value}
-          onChange={handleChange}
-          aria-label="basic tabs example"
+          value={tab}
+          onChange={(_, value) => setTab(value)}
+          aria-label="画面の切り替え"
           variant="fullWidth"
-          sx={{
-            "& .MuiTab-root": {
-              minWidth: 0,
-              flex: 1,
-            },
-          }}
+          sx={{ "& .MuiTab-root": { minWidth: 0, flex: 1 } }}
         >
           <Tab label="カレンダー" />
           <Tab label="フィード" />
@@ -233,66 +79,21 @@ export default function Home() {
           minHeight: "calc(100vh - 48px)",
         }}
       >
-        {value === 0 && (
-          <Box sx={{ p: 2, flex: 1 }}>
-            <Calendar isDrawerOpen={isDrawerOpen} />
-          </Box>
-        )}
-        {value === 1 && (
-          <Box sx={{ p: 2, flex: 1 }}>
-            {isGuest ? (
-              <Box sx={{ textAlign: "center", py: 4 }}>
-                <Typography variant="h6" gutterBottom>
-                  ログインが必要です
-                </Typography>
-                <Typography variant="body1" color="text.secondary" gutterBottom>
-                  フレンドの投稿を見るにはログインしてください
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => signInWithGoogle()}
-                  sx={{ mt: 2 }}
-                >
-                  Googleでログイン
-                </Button>
-              </Box>
+        <Box sx={{ p: 2, flex: 1 }}>
+          {tab === 0 && <Calendar />}
+          {tab === 1 &&
+            (isGuest ? (
+              <LoginRequired description="フレンドの投稿を見るにはログインしてください" />
             ) : (
-              <Feed
-                workouts={feedWorkouts}
-                onRefresh={async () => {
-                  if (user) {
-                    await fetchWorkouts(user.uid);
-                  }
-                }}
-              />
-            )}
-          </Box>
-        )}
-        {value === 2 && (
-          <Box sx={{ p: 2, flex: 1 }}>
-            {isGuest ? (
-              <Box sx={{ textAlign: "center", py: 4 }}>
-                <Typography variant="h6" gutterBottom>
-                  ログインが必要です
-                </Typography>
-                <Typography variant="body1" color="text.secondary" gutterBottom>
-                  マイページを利用するにはログインしてください
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={() => signInWithGoogle()}
-                  sx={{ mt: 2 }}
-                >
-                  Googleでログイン
-                </Button>
-              </Box>
+              <Feed />
+            ))}
+          {tab === 2 &&
+            (isGuest ? (
+              <LoginRequired description="マイページを利用するにはログインしてください" />
             ) : (
               <MyPage />
-            )}
-          </Box>
-        )}
+            ))}
+        </Box>
       </Box>
     </Box>
   );

@@ -4,9 +4,7 @@ import { Team, TeamMember, TeamInvite } from "@/types/team";
 import { useAuth } from "@/hooks/useAuth";
 import {
   createTeam,
-  getTeam,
   getUserTeams,
-  addTeamMember,
   getTeamMembers,
   removeTeamMember,
   createTeamInvite,
@@ -83,9 +81,12 @@ export const useTeamStore = create<TeamState>()(
         set({ isLoading: true, error: null });
         try {
           const teams = await getUserTeams(userId);
+          // 選択中のチームがまだ所属チームにあれば維持し、なければ最初のチームにする
+          const selectedId = get().currentTeam?.id;
           set({
             teams,
-            currentTeam: teams.length > 0 ? teams[0] : null, // 最初のチームを現在のチームに設定
+            currentTeam:
+              teams.find((team) => team.id === selectedId) ?? teams[0] ?? null,
             isLoading: false,
           });
         } catch (error) {
@@ -102,9 +103,12 @@ export const useTeamStore = create<TeamState>()(
       },
 
       deleteTeam: async (teamId: string) => {
+        const user = useAuth.getState().user;
+        if (!user) return;
+
         set({ isLoading: true, error: null });
         try {
-          await deleteTeam(teamId);
+          await deleteTeam(teamId, user.uid);
           set((state) => ({
             teams: state.teams.filter((team) => team.id !== teamId),
             currentTeam:

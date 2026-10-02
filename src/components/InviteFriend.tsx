@@ -14,7 +14,6 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useUserStore } from "@/store/userStore";
 
 interface InviteFriendProps {
   onClose?: () => void;
@@ -57,7 +56,8 @@ export const InviteFriend: React.FC<InviteFriendProps> = ({
       await addDoc(collection(db, "invites"), {
         fromUserId: user.uid,
         fromUserEmail: user.email,
-        toEmail: email,
+        // ルールはログイン中のメールアドレスと照合するので小文字に揃える
+        toEmail: email.trim().toLowerCase(),
         status: "pending",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

@@ -1,6 +1,5 @@
 import React, {
   useState,
-  useMemo,
   useCallback,
   useEffect,
   useRef,
@@ -29,7 +28,7 @@ import {
   MuscleGroup,
   WorkoutType,
 } from "@/data/workoutTypes";
-import { gymLayout, muscleGroupColors, GymMachine } from "@/data/gymLayout";
+import { gymLayout, GymMachine } from "@/data/gymLayout";
 import { ArrowBack as ArrowBackIcon } from "@mui/icons-material";
 
 interface WorkoutTypeSelectorProps {

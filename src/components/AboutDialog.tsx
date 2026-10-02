@@ -16,14 +16,12 @@ import {
   Avatar,
   Divider,
   Chip,
-  Paper,
 } from "@mui/material";
 import {
   FitnessCenter as FitnessIcon,
   Person as PersonIcon,
   Update as UpdateIcon,
   Code as CodeIcon,
-  Favorite as HeartIcon,
   Star as StarIcon,
 } from "@mui/icons-material";
 import ReactMarkdown from "react-markdown";
