@@ -11,9 +11,8 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
+  Paper,
+  Stack,
   TextField,
   Typography,
 } from "@mui/material";
@@ -21,12 +20,20 @@ import {
   Mic as MicIcon,
   Stop as StopIcon,
   Delete as DeleteIcon,
+  Edit as EditIcon,
+  Add as AddIcon,
 } from "@mui/icons-material";
 import { Timestamp } from "firebase/firestore";
 import { useAuth } from "@/hooks/useAuth";
 import { useWorkoutStore } from "@/store/workoutStore";
 import { getWorkoutByDate } from "@/lib/firestore";
-import { MAX_VOICE_TEXT_LENGTH, ParsedWorkout } from "@/types/voiceWorkout";
+import {
+  MAX_VOICE_TEXT_LENGTH,
+  ParsedExercise,
+  ParsedWorkout,
+} from "@/types/voiceWorkout";
+import { WorkoutType } from "@/data/workoutTypes";
+import { WorkoutTypeSelector } from "./WorkoutTypeSelector";
 import { WorkoutRecord, WorkoutSet } from "@/types/workout";
 
 interface VoiceWorkoutDialogProps {
@@ -36,6 +43,23 @@ interface VoiceWorkoutDialogProps {
 }
 
 const isCardio = (name: string) => name.startsWith("有酸素運動");
+
+// 種目選択の対象: 既存の行の種目を差し替えるか、読み取れなかった断片から行を追加するか
+type PickerTarget =
+  | { mode: "replace"; index: number }
+  | { mode: "add"; fragment: string };
+
+// 重量は自重の0を許可、回数・セット数は1以上
+const isValidField = (key: "weight" | "reps" | "sets", value: number) => {
+  if (key === "weight") return Number.isFinite(value) && value >= 0;
+  if (key === "reps") return Number.isFinite(value) && value > 0;
+  return Number.isInteger(value) && value > 0;
+};
+
+const isValidExercise = (e: ParsedExercise) =>
+  isValidField("weight", e.weight) &&
+  isValidField("reps", e.reps) &&
+  isValidField("sets", e.sets);
 
 const getSpeechRecognition = (): any => {
   if (typeof window === "undefined") return null;
@@ -56,6 +80,7 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [parsed, setParsed] = useState<ParsedWorkout | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
   const recognitionRef = useRef<any>(null);
   const speechSupported = getSpeechRecognition() !== null;
 
@@ -133,7 +158,7 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
         return;
       }
       const result = data.workout as ParsedWorkout;
-      if (result.exercises.length === 0) {
+      if (result.exercises.length === 0 && result.unrecognized.length === 0) {
         setError("種目を読み取れませんでした。種目名・重量・回数を話してみてください");
       }
       setParsed(result);
@@ -153,8 +178,64 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
     );
   }, []);
 
+  const handleUpdateExercise = useCallback(
+    (index: number, patch: Partial<ParsedExercise>) => {
+      setParsed((prev) =>
+        prev
+          ? {
+              ...prev,
+              exercises: prev.exercises.map((e, i) =>
+                i === index ? { ...e, ...patch } : e
+              ),
+            }
+          : prev
+      );
+    },
+    []
+  );
+
+  const handleSelectWorkoutType = useCallback(
+    (workoutType: WorkoutType) => {
+      if (!pickerTarget) return;
+      if (pickerTarget.mode === "replace") {
+        handleUpdateExercise(pickerTarget.index, {
+          name: workoutType.name,
+          uncertain: false,
+        });
+      } else {
+        const { fragment } = pickerTarget;
+        setParsed((prev) =>
+          prev
+            ? {
+                ...prev,
+                exercises: [
+                  ...prev.exercises,
+                  {
+                    name: workoutType.name,
+                    weight: 0,
+                    reps: 0,
+                    sets: 1,
+                    spokenName: fragment,
+                    uncertain: false,
+                  },
+                ],
+                unrecognized: prev.unrecognized.filter((u) => u !== fragment),
+              }
+            : prev
+        );
+      }
+      setPickerTarget(null);
+    },
+    [pickerTarget, handleUpdateExercise]
+  );
+
+  const canSave =
+    !!parsed &&
+    parsed.exercises.length > 0 &&
+    parsed.exercises.every(isValidExercise);
+
   const handleSave = useCallback(async () => {
-    if (!user || !parsed || parsed.exercises.length === 0) return;
+    if (!user || !parsed || !canSave) return;
 
     setIsSaving(true);
     setError(null);
@@ -203,7 +284,7 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
     } finally {
       setIsSaving(false);
     }
-  }, [user, parsed, addWorkout, updateWorkout, onSaved, onClose]);
+  }, [user, parsed, canSave, addWorkout, updateWorkout, onSaved, onClose]);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -252,55 +333,116 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
           </Alert>
         )}
 
-        {parsed && parsed.exercises.length > 0 && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2">
-              {parsed.date.replace(/-/g, "/")} に登録する内容
-            </Typography>
-            <List dense>
-              {parsed.exercises.map((e, i) => (
-                <ListItem
-                  key={i}
-                  secondaryAction={
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleRemoveExercise(i)}
-                      aria-label={`${e.name}を削除`}
+        {parsed &&
+          (parsed.exercises.length > 0 || parsed.unrecognized.length > 0) && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                {parsed.date.replace(/-/g, "/")} に登録する内容（タップで修正できます）
+              </Typography>
+              <Stack spacing={1}>
+                {parsed.exercises.map((e, i) => {
+                  const cardio = isCardio(e.name);
+                  const numberField = (
+                    label: string,
+                    key: "weight" | "reps" | "sets",
+                    step: number
+                  ) => (
+                    <TextField
+                      label={label}
+                      type="number"
+                      size="small"
+                      value={Number.isFinite(e[key]) ? e[key] : ""}
+                      onChange={(ev) =>
+                        handleUpdateExercise(i, {
+                          [key]:
+                            ev.target.value === ""
+                              ? NaN
+                              : key === "sets"
+                              ? Math.floor(Number(ev.target.value))
+                              : Number(ev.target.value),
+                        })
+                      }
+                      error={!isValidField(key, e[key])}
+                      slotProps={{ htmlInput: { min: 0, step, inputMode: "decimal" } }}
+                      sx={{ flex: 1 }}
+                    />
+                  );
+                  return (
+                    <Paper
+                      key={i}
+                      variant="outlined"
+                      sx={{
+                        p: 1.5,
+                        borderColor: e.uncertain ? "warning.main" : undefined,
+                      }}
                     >
-                      <DeleteIcon />
-                    </IconButton>
-                  }
-                >
-                  <ListItemText
-                    primary={e.name}
-                    secondary={
-                      isCardio(e.name)
-                        ? `${e.weight}km / ${e.reps}分 × ${e.sets}セット`
-                        : `${e.weight}kg × ${e.reps}回 × ${e.sets}セット`
-                    }
-                  />
-                </ListItem>
-              ))}
-            </List>
-            {parsed.memo && (
-              <Typography variant="body2" color="text.secondary">
-                メモ: {parsed.memo}
-              </Typography>
-            )}
-            {parsed.unrecognized.length > 0 && (
-              <Typography variant="body2" color="warning.main">
-                読み取れなかった部分: {parsed.unrecognized.join("、")}
-              </Typography>
-            )}
-          </Box>
-        )}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Button
+                          onClick={() => setPickerTarget({ mode: "replace", index: i })}
+                          endIcon={<EditIcon fontSize="small" />}
+                          sx={{ flex: 1, justifyContent: "flex-start", textTransform: "none" }}
+                          aria-label={`${e.name}の種目を変更`}
+                        >
+                          {e.name}
+                        </Button>
+                        <IconButton
+                          onClick={() => handleRemoveExercise(i)}
+                          aria-label={`${e.name}を削除`}
+                          size="small"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+                      {e.uncertain && (
+                        <Typography variant="caption" color="warning.main" sx={{ display: "block", mb: 1 }}>
+                          「{e.spokenName}」から推測しました。違う場合は種目名をタップして変更してください
+                        </Typography>
+                      )}
+                      <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                        {numberField(cardio ? "距離(km)" : "重量(kg)", "weight", cardio ? 0.1 : 0.5)}
+                        {numberField(cardio ? "時間(分)" : "回数", "reps", 1)}
+                        {numberField("セット", "sets", 1)}
+                      </Box>
+                    </Paper>
+                  );
+                })}
+              </Stack>
+              {parsed.memo && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  メモ: {parsed.memo}
+                </Typography>
+              )}
+              {parsed.unrecognized.length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="body2" color="warning.main">
+                    読み取れなかった部分（種目を選ぶと追加できます）
+                  </Typography>
+                  {parsed.unrecognized.map((fragment) => (
+                    <Button
+                      key={fragment}
+                      size="small"
+                      startIcon={<AddIcon />}
+                      onClick={() => setPickerTarget({ mode: "add", fragment })}
+                      sx={{ mr: 1, mt: 0.5, textTransform: "none" }}
+                    >
+                      {fragment}
+                    </Button>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={isSaving}>
           キャンセル
         </Button>
         {parsed && parsed.exercises.length > 0 ? (
-          <Button variant="contained" onClick={handleSave} disabled={isSaving}>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={isSaving || !canSave}
+          >
             {isSaving ? <CircularProgress size={20} /> : "登録する"}
           </Button>
         ) : (
@@ -313,6 +455,11 @@ export const VoiceWorkoutDialog: React.FC<VoiceWorkoutDialogProps> = ({
           </Button>
         )}
       </DialogActions>
+      <WorkoutTypeSelector
+        open={pickerTarget !== null}
+        onClose={() => setPickerTarget(null)}
+        onSelect={handleSelectWorkoutType}
+      />
     </Dialog>
   );
 };

@@ -1,62 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
-import { workoutTypes } from "@/data/workoutTypes";
 import {
   AI_ALLOWED_USERS_COLLECTION,
   MAX_VOICE_TEXT_LENGTH,
   ParsedWorkout,
 } from "@/types/voiceWorkout";
-
-// 音声入力のテキストをワークアウトJSONに整形する（コスト優先で Flash-Lite を使用）
-const MODEL = "gemini-3.5-flash-lite";
-
-const exerciseNames = workoutTypes.map((t) => t.name);
-
-const responseJsonSchema = {
-  type: "object",
-  properties: {
-    date: { type: "string", description: "トレーニングした日付 (YYYY-MM-DD)" },
-    exercises: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string", enum: exerciseNames },
-          weight: {
-            type: "number",
-            description:
-              "重量(kg)。自重は0。有酸素運動の場合は距離(km)、不明なら0",
-          },
-          reps: {
-            type: "number",
-            description: "1セットあたりの回数。有酸素運動の場合は時間(分)",
-          },
-          sets: { type: "integer", description: "同じ重量・回数で行ったセット数" },
-        },
-        required: ["name", "weight", "reps", "sets"],
-      },
-    },
-    memo: { type: "string", description: "種目以外の感想など。なければ空文字" },
-    unrecognized: {
-      type: "array",
-      description: "種目リストに当てはめられなかった発言の断片",
-      items: { type: "string" },
-    },
-  },
-  required: ["date", "exercises", "memo", "unrecognized"],
-};
-
-const systemInstruction = `あなたは筋トレ記録アプリの入力アシスタントです。
-ユーザーが音声入力で話したトレーニング内容（音声認識の誤変換を含むことがあります）を、記録用のJSONに整形してください。
-
-ルール:
-- 種目名は必ず次のリストから最も近いものを選ぶ: ${exerciseNames.join("、")}
-- リストのどれにも当てはまらない種目は exercises に入れず unrecognized に入れる
-- 「60キロ10回3セット」なら weight=60, reps=10, sets=3 の1エントリにする
-- 重量や回数がセットごとに違う場合はエントリを分ける
-- 有酸素運動は weight=距離(km)、reps=時間(分)。距離なら「有酸素運動（距離）」、時間なら「有酸素運動（時間）」を選ぶ
-- 日付は「今日」の日付を基準に「昨日」「おととい」などを解釈する。言及がなければ今日
-- 数値は漢数字や音声認識の表記ゆれ（例: 「ろくじゅっきろ」）も解釈する`;
+import {
+  MODEL,
+  buildUserPrompt,
+  responseJsonSchema,
+  sanitize,
+  systemInstruction,
+} from "@/lib/voiceWorkoutPrompt";
 
 // Firebase の IDトークンを検証して uid を返す
 async function verifyIdToken(idToken: string): Promise<string | null> {
@@ -89,23 +44,6 @@ function todayInJapan(): string {
   return new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
     new Date()
   );
-}
-
-function sanitize(parsed: ParsedWorkout, today: string): ParsedWorkout {
-  return {
-    date: /^\d{4}-\d{2}-\d{2}$/.test(parsed.date) ? parsed.date : today,
-    exercises: (parsed.exercises ?? []).filter(
-      (e) =>
-        exerciseNames.includes(e.name) &&
-        Number.isFinite(e.weight) &&
-        Number.isFinite(e.reps) &&
-        Number.isInteger(e.sets) &&
-        e.sets > 0 &&
-        e.sets <= 20
-    ),
-    memo: parsed.memo ?? "",
-    unrecognized: parsed.unrecognized ?? [],
-  };
 }
 
 export async function POST(req: Request) {
@@ -146,7 +84,7 @@ export async function POST(req: Request) {
     const genai = new GoogleGenAI({ apiKey });
     const response = await genai.models.generateContent({
       model: MODEL,
-      contents: `今日の日付: ${today}\n\n<transcript>\n${text}\n</transcript>`,
+      contents: buildUserPrompt(text, today),
       config: {
         systemInstruction,
         responseMimeType: "application/json",

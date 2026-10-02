@@ -4,6 +4,8 @@ export type ParsedExercise = {
   weight: number; // kg。有酸素運動は距離(km)
   reps: number; // 回数。有酸素運動は時間(分)
   sets: number;
+  spokenName: string; // 実際に話した種目名（確認画面での表示用）
+  uncertain: boolean; // 一覧と一致せず近い候補を選んだ場合 true
 };
 
 export type ParsedWorkout = {
